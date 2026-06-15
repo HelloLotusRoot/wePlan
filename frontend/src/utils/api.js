@@ -1,0 +1,102 @@
+const BASE_URL = 'http://localhost:8080/api';
+
+async function request(path, options = {}) {
+  const url = `${BASE_URL}${path}`;
+  if (!options.headers) {
+    options.headers = {};
+  }
+  options.headers['Content-Type'] = 'application/json';
+  
+  try {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    if (response.status === 204) return null;
+    const text = await response.text();
+    return text ? JSON.parse(text) : null;
+  } catch (error) {
+    console.warn(`Backend API request to ${url} failed:`, error.message);
+    throw error;
+  }
+}
+
+export const api = {
+  async getSettings(localFallback) {
+    try {
+      const data = await request('/settings');
+      return data;
+    } catch (e) {
+      return localFallback;
+    }
+  },
+  async saveSettings(settings) {
+    try {
+      return await request('/settings', { method: 'POST', body: JSON.stringify(settings) });
+    } catch (e) {
+      console.warn("Failed to save settings to backend, local state updated.");
+    }
+  },
+  
+  async getShifts(localFallback) {
+    try {
+      const data = await request('/shifts');
+      return data;
+    } catch (e) {
+      return localFallback;
+    }
+  },
+  async saveShifts(shifts) {
+    try {
+      return await request('/shifts', { method: 'POST', body: JSON.stringify(shifts) });
+    } catch (e) {
+      console.warn("Failed to save shifts to backend.");
+    }
+  },
+
+  async getEvents(localFallback) {
+    try {
+      const data = await request('/events');
+      return data;
+    } catch (e) {
+      return localFallback;
+    }
+  },
+  async saveEvents(events) {
+    try {
+      return await request('/events', { method: 'POST', body: JSON.stringify(events) });
+    } catch (e) {
+      console.warn("Failed to sync all events to backend.");
+    }
+  },
+  async saveSingleEvent(event) {
+    try {
+      return await request('/events/single', { method: 'POST', body: JSON.stringify(event) });
+    } catch (e) {
+      console.warn("Failed to save event to backend.");
+    }
+  },
+  async deleteEvent(id) {
+    try {
+      await request(`/events/${id}`, { method: 'DELETE' });
+    } catch (e) {
+      console.warn("Failed to delete event from backend.");
+    }
+  },
+
+  async getSharedUsers(localFallback) {
+    try {
+      const data = await request('/shared-users');
+      return data;
+    } catch (e) {
+      return localFallback;
+    }
+  },
+  async saveSharedUsers(users) {
+    try {
+      return await request('/shared-users', { method: 'POST', body: JSON.stringify(users) });
+    } catch (e) {
+      console.warn("Failed to save shared users to backend.");
+    }
+  }
+};

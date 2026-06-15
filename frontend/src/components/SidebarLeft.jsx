@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Calendar as CalendarIcon, 
   Clock, 
@@ -7,7 +7,9 @@ import {
   FileText, 
   BarChart3, 
   Settings, 
-  UserPlus 
+  UserPlus,
+  Edit,
+  Check
 } from 'lucide-react';
 
 export default function SidebarLeft({ 
@@ -15,8 +17,22 @@ export default function SidebarLeft({
   setCurrentTab, 
   sharedUsers, 
   onInviteFriend,
-  isPrivateMode 
+  isPrivateMode,
+  userName,
+  setUserName,
+  userJob,
+  setUserJob
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [localName, setLocalName] = useState(userName);
+  const [localJob, setLocalJob] = useState(userJob);
+
+  const handleSaveProfile = () => {
+    setUserName(localName);
+    setUserJob(localJob);
+    setIsEditing(false);
+  };
+
   const menuItems = [
     { id: 'calendar', label: '캘린더', icon: CalendarIcon },
     { id: 'schedule', label: '스케줄', icon: Clock },
@@ -30,17 +46,56 @@ export default function SidebarLeft({
   return (
     <aside className="sidebar-left">
       {/* User Profile */}
-      <div className="profile-card">
-        <img 
-          src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=120&auto=format&fit=crop" 
-          alt="김소현 간호사" 
-          className="profile-avatar" 
-        />
-        <div className="profile-info">
-          <span className="profile-name">김소현</span>
-          <span className="profile-role">간호사</span>
+      <div className="profile-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '8px', padding: '12px 4px', borderBottom: '1px solid var(--border-color)', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}>
+          <img 
+            src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=120&auto=format&fit=crop" 
+            alt={userName} 
+            className="profile-avatar" 
+          />
+          {!isEditing ? (
+            <div className="profile-info" style={{ flex: 1 }}>
+              <span className="profile-name" style={{ display: 'block', fontSize: '15px', fontWeight: '600' }}>{userName}</span>
+              <span className="profile-role" style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)' }}>{userJob}</span>
+            </div>
+          ) : (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <input 
+                type="text" 
+                className="input-text" 
+                style={{ padding: '2px 6px', fontSize: '12px', width: '100%', height: '22px' }}
+                value={localName} 
+                onChange={(e) => setLocalName(e.target.value)} 
+                placeholder="이름"
+              />
+              <input 
+                type="text" 
+                className="input-text" 
+                style={{ padding: '2px 6px', fontSize: '11px', width: '100%', height: '22px' }}
+                value={localJob} 
+                onChange={(e) => setLocalJob(e.target.value)} 
+                placeholder="직종"
+              />
+            </div>
+          )}
+          
+          <button 
+            onClick={() => {
+              if (isEditing) {
+                handleSaveProfile();
+              } else {
+                setIsEditing(true);
+              }
+            }}
+            className="nav-btn"
+            style={{ padding: '4px', alignSelf: 'center' }}
+            title={isEditing ? "프로필 저장" : "프로필 수정"}
+          >
+            {isEditing ? <Check size={14} color="#10b981" /> : <Edit size={14} />}
+          </button>
         </div>
       </div>
+
 
       {/* Navigation Menu */}
       <ul className="menu-list">

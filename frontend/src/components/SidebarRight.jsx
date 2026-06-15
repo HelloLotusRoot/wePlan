@@ -10,7 +10,8 @@ export default function SidebarRight({
   onAddEventClick,
   onEditEvent,
   onDeleteEvent,
-  isPrivateMode
+  isPrivateMode,
+  holidaysMap = {}
 }) {
   const selectedDate = new Date(selectedDateStr + "T00:00:00");
   const formattedDate = selectedDate.toLocaleDateString('ko-KR', {
@@ -19,7 +20,7 @@ export default function SidebarRight({
     weekday: 'short'
   });
 
-  const holiday = getHoliday(selectedDateStr);
+  const holiday = holidaysMap[selectedDateStr] || getHoliday(selectedDateStr);
 
   // Filter events for this selected date
   const selectedDayEvents = events.filter(evt => {
@@ -31,6 +32,7 @@ export default function SidebarRight({
 
   // Shifts on selected day
   const dayShift = selectedDayEvents.find(e => e.type === 'shift');
+  const dayShiftData = dayShift ? shifts.find(s => s.id === dayShift.shiftType) : null;
 
   // Appointments on selected day
   const dayApts = selectedDayEvents.filter(e => e.type === 'appointment' || (e.startDate && e.endDate));
@@ -60,11 +62,17 @@ export default function SidebarRight({
         </div>
 
         {/* Selected Shift */}
-        {dayShift ? (
-          <div className={`detail-event-row ${dayShift.shiftType}`}>
+        {dayShift && dayShiftData ? (
+          <div 
+            className="detail-event-row"
+            style={{
+              borderLeft: `4px solid ${dayShiftData.color}`,
+              backgroundColor: dayShiftData.color + '10'
+            }}
+          >
             <div className="row-top">
-              <span className="row-title" style={{ color: `var(--shift-${dayShift.shiftType}-text)` }}>
-                {dayShift.shiftType.toUpperCase()} 근무
+              <span className="row-title" style={{ color: dayShiftData.color }}>
+                {dayShiftData.label} 근무
               </span>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button onClick={() => onEditEvent(dayShift)} className="nav-btn" style={{ padding: '2px' }}>
@@ -75,12 +83,12 @@ export default function SidebarRight({
                 </button>
               </div>
             </div>
-            <span className="row-time" style={{ display: 'flex', alignStyle: 'center', gap: '4px' }}>
-              <Clock size={12} style={{ marginTop: '2px' }} />
-              {shifts[dayShift.shiftType].start} - {shifts[dayShift.shiftType].end}
+            <span className="row-time" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <Clock size={12} />
+              {dayShiftData.start} - {dayShiftData.end}
             </span>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-              병동 정규 스케줄
+              지정 근무 스케줄
             </span>
           </div>
         ) : (

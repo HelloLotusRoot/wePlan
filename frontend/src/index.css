@@ -367,26 +367,36 @@ input, select, textarea {
 .weekday.saturday { color: #3b82f6; }
 
 .grid-days {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  grid-auto-rows: minmax(100px, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 4px;
   flex: 1;
 }
 
+.week-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-auto-rows: minmax(110px, 1fr);
+  gap: 4px;
+  position: relative;
+  flex: 1;
+}
+
+
 /* Individual Day Cell */
 .day-cell {
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   padding: 6px;
   display: flex;
   flex-direction: column;
   gap: 4px;
   background-color: var(--bg-card);
   position: relative;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
   min-height: 110px;
   cursor: pointer;
+  overflow: visible !important;
 }
 
 .day-cell:hover {
@@ -412,6 +422,7 @@ input, select, textarea {
   font-size: 13px;
   font-weight: 500;
   margin-bottom: 4px;
+  height: 24px; /* Fixed height to align all cell events vertically */
 }
 
 .day-cell.sunday .day-number { color: #ef4444; }
@@ -439,7 +450,7 @@ input, select, textarea {
   flex-direction: column;
   gap: 4px;
   flex: 1;
-  overflow-y: auto;
+  overflow: visible !important;
 }
 
 /* Shift Event Display Options */
@@ -772,10 +783,13 @@ input, select, textarea {
   display: flex;
   gap: 8px;
   align-items: center;
+  width: 100%;
 }
 
 .input-text, select {
   flex: 1;
+  width: 100%;
+  min-width: 0;
   padding: 8px 12px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
@@ -787,6 +801,7 @@ input, select, textarea {
   border-color: var(--primary);
   background-color: #ffffff;
 }
+
 
 .btn-save {
   background-color: var(--primary);

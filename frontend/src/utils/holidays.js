@@ -77,3 +77,69 @@ export function isOffDay(dateStr) {
   const date = new Date(dateStr + "T00:00:00");
   return date.getDay() === 0; // Sunday
 }
+
+/**
+ * Fetches holidays from Korea Astronomy and Space Science Institute via Public Data Portal.
+ * Supported range: 2024 to 2026.
+ * Falls back to local holiday data if API Key is not set or fetch fails (e.g., CORS, network).
+ */
+export async function fetchHolidays(year, month) {
+  const apiKey = import.meta.env.VITE_HOLIDAY_API_KEY;
+  const formattedMonth = String(month).padStart(2, '0');
+  
+  // If the key is the default placeholder, return local fallback immediately
+  if (!apiKey || apiKey === "YOUR_PUBLIC_DATA_PORTAL_API_KEY_HERE") {
+    console.warn("VITE_HOLIDAY_API_KEY is not configured in .env. Using local holiday database.");
+    return getLocalHolidaysForMonth(year, month);
+  }
+
+  // URL for getHoliDeInfo (Public holidays info)
+  const url = `https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getHoliDeInfo?serviceKey=${encodeURIComponent(apiKey)}&solYear=${year}&solMonth=${formattedMonth}&_type=json&numOfRows=50`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    const holidays = {};
+    const items = data?.response?.body?.items?.item;
+
+    if (items) {
+      // If there is only one holiday, data.response.body.items.item is an object.
+      // If there are multiple, it is an array.
+      const itemsList = Array.isArray(items) ? items : [items];
+      itemsList.forEach(item => {
+        if (item.isHoliday === 'Y') {
+          const locdateStr = String(item.locdate); // e.g. 20240505
+          const y = locdateStr.substring(0, 4);
+          const m = locdateStr.substring(4, 6);
+          const d = locdateStr.substring(6, 8);
+          const formattedDate = `${y}-${m}-${d}`;
+          holidays[formattedDate] = { name: item.dateName };
+        }
+      });
+      return holidays;
+    }
+    return {};
+  } catch (error) {
+    console.error(`Failed to fetch holidays from Public Data Portal API for ${year}-${formattedMonth}:`, error);
+    console.warn("Using local holiday database fallback.");
+    return getLocalHolidaysForMonth(year, month);
+  }
+}
+
+/**
+ * Filter local HOLIDAYS_DATA by Year and Month.
+ */
+function getLocalHolidaysForMonth(year, month) {
+  const prefix = `${year}-${String(month).padStart(2, '0')}`;
+  const holidays = {};
+  Object.keys(HOLIDAYS_DATA).forEach(dateStr => {
+    if (dateStr.startsWith(prefix)) {
+      holidays[dateStr] = HOLIDAYS_DATA[dateStr];
+    }
+  });
+  return holidays;
+}
+

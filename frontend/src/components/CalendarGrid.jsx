@@ -17,7 +17,8 @@ export default function CalendarGrid({
   onSelectDay,
   selectedDay,
   onAddEventClick,
-  isPrivateMode
+  isPrivateMode,
+  holidaysMap = {}
 }) {
   const [draggedEventId, setDraggedEventId] = useState(null);
   const [dragOverDate, setDragOverDate] = useState(null);
@@ -83,6 +84,91 @@ export default function CalendarGrid({
 
   const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
 
+  // Group dayCells into weeks and calculate vertical alignment slot indices for each event
+  const weeksCount = dayCells.length / 7;
+  const weeksEventsSlots = [];
+
+  for (let w = 0; w < weeksCount; w++) {
+    const weekDays = dayCells.slice(w * 7, (w + 1) * 7);
+    const uniqueWeekEventIds = new Set();
+    const weekEventsList = [];
+
+    weekDays.forEach(dayCell => {
+      const dateStr = formatDateString(dayCell.date);
+      const dayEvts = events.filter(evt => {
+        if (evt.type === 'shift') return false;
+        if (evt.startDate && evt.endDate) {
+          return dateStr >= evt.startDate && dateStr <= evt.endDate;
+        }
+        return evt.date === dateStr;
+      });
+
+      dayEvts.forEach(evt => {
+        if (!uniqueWeekEventIds.has(evt.id)) {
+          uniqueWeekEventIds.add(evt.id);
+          weekEventsList.push(evt);
+        }
+      });
+    });
+
+    // Sort: multi-day first, then longer first, then earlier start first, then birthdays, then appointments
+    weekEventsList.sort((a, b) => {
+      const aIsMulti = !!(a.startDate && a.endDate);
+      const bIsMulti = !!(b.startDate && b.endDate);
+
+      if (aIsMulti && !bIsMulti) return -1;
+      if (!aIsMulti && bIsMulti) return 1;
+
+      if (aIsMulti && bIsMulti) {
+        if (a.startDate !== b.startDate) {
+          return a.startDate.localeCompare(b.startDate);
+        }
+        const aDuration = new Date(a.endDate) - new Date(a.startDate);
+        const bDuration = new Date(b.endDate) - new Date(b.startDate);
+        if (aDuration !== bDuration) {
+          return bDuration - aDuration; // longer first
+        }
+      }
+
+      if (a.type === 'birthday' && b.type !== 'birthday') return -1;
+      if (a.type !== 'birthday' && b.type === 'birthday') return 1;
+
+      return (a.title || a.name || '').localeCompare(b.title || b.name || '');
+    });
+
+    const slots = {};
+    const occupiedSlotsByDay = Array.from({ length: 7 }, () => new Set());
+
+    weekEventsList.forEach(evt => {
+      const occupiedDayIndices = [];
+      weekDays.forEach((dayCell, dayIdx) => {
+        const dateStr = formatDateString(dayCell.date);
+        const isActive = (evt.startDate && evt.endDate)
+          ? (dateStr >= evt.startDate && dateStr <= evt.endDate)
+          : (evt.date === dateStr);
+        if (isActive) {
+          occupiedDayIndices.push(dayIdx);
+        }
+      });
+
+      let slotIdx = 0;
+      while (true) {
+        const isSlotFree = occupiedDayIndices.every(dayIdx => !occupiedSlotsByDay[dayIdx].has(slotIdx));
+        if (isSlotFree) {
+          break;
+        }
+        slotIdx++;
+      }
+
+      slots[evt.id] = slotIdx;
+      occupiedDayIndices.forEach(dayIdx => {
+        occupiedSlotsByDay[dayIdx].add(slotIdx);
+      });
+    });
+
+    weeksEventsSlots.push({ slots });
+  }
+
   // Drag and Drop handlers
   const handleDragStart = (e, eventId) => {
     setDraggedEventId(eventId);
@@ -111,6 +197,11 @@ export default function CalendarGrid({
     setDragOverDate(null);
   };
 
+  const weeks = [];
+  for (let i = 0; i < dayCells.length; i += 7) {
+    weeks.push(dayCells.slice(i, i + 7));
+  }
+
   return (
     <div className="calendar-card" style={{ display: 'flex', flexDirection: 'column' }}>
       {/* View Mode Toolbar & Nav */}
@@ -126,18 +217,25 @@ export default function CalendarGrid({
 
         {/* Legend */}
         <div className="shift-legend" style={{ border: 'none', boxShadow: 'none', padding: 0 }}>
-          <div className="legend-item">
-            <span className="legend-badge day">DAY</span>
-            <span style={{ color: 'var(--text-muted)' }}>{shifts.day.start}-{shifts.day.end}</span>
-          </div>
-          <div className="legend-item">
-            <span className="legend-badge eve">EVE</span>
-            <span style={{ color: 'var(--text-muted)' }}>{shifts.eve.start}-{shifts.eve.end}</span>
-          </div>
-          <div className="legend-item">
-            <span className="legend-badge night">NIGHT</span>
-            <span style={{ color: 'var(--text-muted)' }}>{shifts.night.start}-{shifts.night.end}</span>
-          </div>
+          {Array.isArray(shifts) && shifts.map(shift => (
+            <div className="legend-item" key={shift.id}>
+              <span 
+                className="legend-badge" 
+                style={{ 
+                  backgroundColor: shift.color + '25', 
+                  color: shift.color,
+                  border: `1px solid ${shift.color}40`,
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  fontSize: '10px',
+                  fontWeight: '600'
+                }}
+              >
+                {shift.label}
+              </span>
+              <span style={{ color: 'var(--text-muted)' }}>{shift.start}-{shift.end}</span>
+            </div>
+          ))}
           <div className="legend-item">
             <span className="legend-badge appointment" style={{ borderRadius: '50%', width: '8px', height: '8px', padding: 0 }}></span>
             <span>약속/개인</span>
@@ -175,237 +273,340 @@ export default function CalendarGrid({
 
       {/* Grid Days */}
       <div className="grid-days">
-        {dayCells.map((cell, idx) => {
-          const dateStr = formatDateString(cell.date);
-          const dayNum = cell.date.getDate();
-          const dayOfWeek = cell.date.getDay();
-          const isSunday = dayOfWeek === 0;
-          const isSaturday = dayOfWeek === 6;
-
-          // Lunar Date
-          const lunarDate = getLunarDate(dateStr);
-          const lunarDayOnly = lunarDate ? lunarDate.split(' ')[1] : ''; // e.g. "4.15"
-
-          // Holiday Info
-          const holiday = settings.showKoreanHolidays ? getHoliday(dateStr) : null;
-
-          // Filter events for this day
-          const dayEvents = events.filter(evt => {
-            if (evt.startDate && evt.endDate) {
-              // Multi-day event spans across this date
-              return dateStr >= evt.startDate && dateStr <= evt.endDate;
-            }
-            return evt.date === dateStr;
+        {weeks.map((weekDays, weekIdx) => {
+          const weekSlotsInfo = weeksEventsSlots[weekIdx];
+          
+          // Get all events of this week (for multi-day trip event rendering)
+          const weekEventsList = [];
+          const uniqueWeekEventIds = new Set();
+          weekDays.forEach(dayCell => {
+            const dateStr = formatDateString(dayCell.date);
+            const dayEvts = events.filter(evt => {
+              if (evt.type === 'shift') return false;
+              if (evt.startDate && evt.endDate) {
+                return dateStr >= evt.startDate && dateStr <= evt.endDate;
+              }
+              return evt.date === dateStr;
+            });
+            dayEvts.forEach(evt => {
+              if (!uniqueWeekEventIds.has(evt.id)) {
+                uniqueWeekEventIds.add(evt.id);
+                weekEventsList.push(evt);
+              }
+            });
           });
 
-          // Check if this cell is currently selected
-          const isSelected = selectedDay === dateStr;
-
-          // Today indicator
-          const isCellToday = formatDateString(new Date()) === dateStr;
-
-          // Determine classnames for the day cell
-          let cellClass = "day-cell";
-          if (!cell.isCurrentMonth) cellClass += " other-month";
-          if (isCellToday) cellClass += " today";
-          if (dragOverDate === dateStr) cellClass += " drag-over";
-
-          // Find if there is a shift on this day
-          const dayShiftEvent = dayEvents.find(e => e.type === 'shift');
-          const dayShiftData = dayShiftEvent ? shifts[dayShiftEvent.shiftType] : null;
-
           return (
-            <div 
-              key={idx} 
-              className={cellClass}
-              onClick={() => onSelectDay(dateStr)}
-              onDragOver={(e) => handleDragOver(e, dateStr)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, dateStr)}
-              style={
-                workViewMode === 'full' && dayShiftEvent && dayShiftData
-                  ? {
-                      backgroundColor: `var(--shift-${dayShiftEvent.shiftType}-bg)`,
-                      borderColor: `var(--shift-${dayShiftEvent.shiftType}-border)`
-                    }
-                  : {}
-              }
-            >
-              {/* Day info top row */}
-              <div className="day-number-container">
-                <span className="day-number" style={{ 
-                  fontWeight: isCellToday ? '700' : '500',
-                  color: holiday ? '#ef4444' : (isSunday ? '#ef4444' : (isSaturday ? '#3b82f6' : 'inherit'))
-                }}>
-                  {dayNum}
-                </span>
+            <div key={weekIdx} className="week-row">
+              {weekDays.map((cell, dayIdx) => {
+                const idx = weekIdx * 7 + dayIdx;
+                const dateStr = formatDateString(cell.date);
+                const dayNum = cell.date.getDate();
+                const dayOfWeek = cell.date.getDay();
+                const isSunday = dayOfWeek === 0;
+                const isSaturday = dayOfWeek === 6;
 
-                {holiday && (
-                  <span className="holiday-label" title={holiday.name}>{holiday.name}</span>
-                )}
-                
-                {settings.showLunarAnniversaries && !holiday && lunarDayOnly && (
-                  <span className="lunar-sub">{lunarDayOnly}</span>
-                )}
-              </div>
+                // Lunar Date
+                const lunarDate = getLunarDate(dateStr);
+                const lunarDayOnly = lunarDate ? lunarDate.split(' ')[1] : '';
 
-              {/* Day Events Container */}
-              <div className="cell-events">
-                {dayEvents.map(evt => {
-                  const isPrivate = evt.isPrivate && isPrivateMode;
+                // Holiday Info
+                const holiday = settings.showKoreanHolidays ? (holidaysMap[dateStr] || getHoliday(dateStr)) : null;
 
-                  // Render shift block
-                  if (evt.type === 'shift') {
-                    if (workViewMode === 'full') {
-                      // Whole cell background color, so render small label text inside
-                      return (
-                        <div key={evt.id} className={`shift-badge-mini ${evt.shiftType}`}>
-                          {evt.shiftType.toUpperCase()}
-                        </div>
-                      );
-                    } else {
-                      // Render as block inside cell
-                      return (
-                        <div 
-                          key={evt.id} 
-                          className={`shift-block-full ${evt.shiftType}`}
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, evt.id)}
-                        >
-                          <div>{evt.shiftType.toUpperCase()}</div>
-                          <span className="shift-block-time">
-                            {shifts[evt.shiftType].start}-{shifts[evt.shiftType].end}
-                          </span>
-                        </div>
-                      );
-                    }
-                  }
-
-                  // Render multi-day trip event
+                // Filter events for this day
+                const dayEvents = events.filter(evt => {
                   if (evt.startDate && evt.endDate) {
-                    const isStart = dateStr === evt.startDate;
-                    const isMiddle = dateStr > evt.startDate && dateStr < evt.endDate;
-                    const isEnd = dateStr === evt.endDate;
-
-                    let bg = '#e0f2fe';
-                    let text = '#0369a1';
-                    if (evt.color === 'purple') { bg = '#f3e8ff'; text = '#6b21a8'; }
-                    if (evt.color === 'emerald') { bg = '#dcfce7'; text = '#166534'; }
-
-                    return (
-                      <div 
-                        key={evt.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, evt.id)}
-                        style={{
-                          backgroundColor: bg,
-                          color: text,
-                          fontSize: '10px',
-                          fontWeight: '600',
-                          padding: '2px 6px',
-                          borderRadius: isStart ? '8px 0 0 8px' : (isEnd ? '0 8px 8px 0' : '0'),
-                          marginLeft: isStart ? '0' : '-6px',
-                          marginRight: isEnd ? '0' : '-6px',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '2px',
-                          marginTop: '2px',
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
-                        }}
-                      >
-                        {isStart && <span style={{ marginRight: '2px' }}>✈️</span>}
-                        {(isStart || cell.date.getDay() === 0 || idx % 7 === 0) && (isPrivate ? '일정 있음' : evt.title)}
-                      </div>
-                    );
+                    return dateStr >= evt.startDate && dateStr <= evt.endDate;
                   }
+                  return evt.date === dateStr;
+                });
 
-                  // Render birthday event
-                  if (evt.type === 'birthday') {
-                    return (
-                      <div 
-                        key={evt.id}
-                        style={{
-                          fontSize: '10px',
-                          color: '#db2777',
-                          backgroundColor: '#fdf2f8',
-                          padding: '2px 4px',
-                          borderRadius: '4px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '2px',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          fontWeight: '600'
-                        }}
-                      >
-                        🎂 {isPrivate ? '생신' : `${evt.name} 생일`}
-                        {evt.isLunar && <span style={{ fontSize: '8px', opacity: 0.8 }}>(음)</span>}
-                      </div>
-                    );
-                  }
+                // Check if this cell is currently selected
+                const isSelected = selectedDay === dateStr;
 
-                  // Render regular appointment
-                  if (evt.type === 'appointment') {
-                    const displayTitle = isPrivate ? '약속' : evt.title;
-                    if (aptViewMode === 'dot') {
-                      return (
-                        <div 
-                          key={evt.id} 
-                          className="appointment-dot-item"
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, evt.id)}
-                          title={`${evt.title} (${evt.time})`}
-                        >
-                          <span className={`dot-indicator ${isPrivate ? 'private' : ''}`}></span>
-                          <span>{displayTitle}</span>
-                        </div>
-                      );
-                    } else {
-                      return (
-                        <div 
-                          key={evt.id} 
-                          className={`appointment-box-item ${isPrivate ? 'private' : ''}`}
-                          draggable
-                          onDragStart={(e) => handleDragStart(e, evt.id)}
-                          title={`${evt.title} (${evt.time})`}
-                        >
-                          {evt.time && <span style={{ opacity: 0.8, fontSize: '8px', marginRight: '3px' }}>{evt.time}</span>}
-                          {displayTitle}
-                        </div>
-                      );
+                // Today indicator
+                const isCellToday = formatDateString(new Date()) === dateStr;
+
+                // Determine classnames for the day cell
+                let cellClass = "day-cell";
+                if (!cell.isCurrentMonth) cellClass += " other-month";
+                if (isCellToday) cellClass += " today";
+                if (dragOverDate === dateStr) cellClass += " drag-over";
+
+                // Find if there is a shift on this day
+                const dayShiftEvent = dayEvents.find(e => e.type === 'shift');
+                const dayShiftData = dayShiftEvent && Array.isArray(shifts) ? shifts.find(s => s.id === dayShiftEvent.shiftType) : null;
+
+                return (
+                  <div 
+                    key={idx} 
+                    className={cellClass}
+                    onClick={() => onSelectDay(dateStr)}
+                    onDragOver={(e) => handleDragOver(e, dateStr)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, dateStr)}
+                    style={
+                      dayShiftEvent && dayShiftData
+                        ? {
+                            backgroundColor: dayShiftData.color + '15',
+                            borderColor: dayShiftData.color + '30',
+                            borderWidth: '2.5px'
+                          }
+                        : {}
                     }
-                  }
+                  >
+                    {/* Day info top row */}
+                    <div className="day-number-container" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span className="day-number" style={{ 
+                        fontWeight: isCellToday ? '700' : '500',
+                        color: holiday ? '#ef4444' : (isSunday ? '#ef4444' : (isSaturday ? '#3b82f6' : 'inherit'))
+                      }}>
+                        {dayNum}
+                      </span>
 
-                  return null;
-                })}
-              </div>
+                      {holiday && (
+                        <span className="holiday-label" style={!dayShiftEvent ? { marginLeft: 'auto' } : {}} title={holiday.name}>{holiday.name}</span>
+                      )}
 
-              {/* Inline Hover Action to Add Event */}
-              <button 
-                className="cell-add-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAddEventClick(dateStr);
-                }}
-                style={{
-                  position: 'absolute',
-                  bottom: '4px',
-                  right: '4px',
-                  opacity: 0,
-                  transition: 'opacity 0.2s',
-                  padding: '2px',
-                  borderRadius: '50%',
-                  backgroundColor: 'var(--primary-light)',
-                  color: 'var(--primary)'
-                }}
-                onMouseEnter={(e) => e.target.style.opacity = 1}
-              >
-                <Plus size={12} />
-              </button>
+                      {dayShiftEvent && dayShiftData && (
+                        <span style={{ 
+                          fontSize: '11px', 
+                          fontWeight: '700', 
+                          color: dayShiftData.color,
+                          backgroundColor: dayShiftData.color + '18',
+                          padding: '1px 6px',
+                          borderRadius: '4px',
+                          marginLeft: 'auto'
+                        }}>
+                          {dayShiftData.label}
+                        </span>
+                      )}
+
+                      {settings.showLunarAnniversaries && !holiday && lunarDayOnly && !dayShiftEvent && (
+                        <span className="lunar-sub" style={{ marginLeft: 'auto' }}>{lunarDayOnly}</span>
+                      )}
+                    </div>
+
+                    {/* Day Events Container */}
+                    <div className="cell-events">
+                      {(() => {
+                        const dayNonShiftEvents = dayEvents.filter(e => e.type !== 'shift');
+
+                        // Find maximum slot index active on this specific day
+                        let maxDaySlotIdx = -1;
+                        dayNonShiftEvents.forEach(evt => {
+                          const slot = weekSlotsInfo.slots[evt.id];
+                          if (slot !== undefined && slot > maxDaySlotIdx) {
+                            maxDaySlotIdx = slot;
+                          }
+                        });
+
+                        const elements = [];
+                        for (let s = 0; s <= maxDaySlotIdx; s++) {
+                          const evt = dayNonShiftEvents.find(e => weekSlotsInfo.slots[e.id] === s);
+                          if (evt) {
+                            const isPrivate = evt.isPrivate && isPrivateMode;
+
+                            // If it's a multi-day trip event, render spacer placeholder inside day cell
+                            if (evt.startDate && evt.endDate) {
+                              elements.push(
+                                <div 
+                                  key={`placeholder-${idx}-${s}`}
+                                  style={{ 
+                                    height: '20px', 
+                                    minHeight: '20px', 
+                                    marginTop: '4px',
+                                    visibility: 'hidden'
+                                  }} 
+                                />
+                              );
+                            }
+
+                            // Render birthday event
+                            else if (evt.type === 'birthday') {
+                              elements.push(
+                                <div 
+                                  key={evt.id}
+                                  style={{
+                                    fontSize: '10px',
+                                    color: '#db2777',
+                                    backgroundColor: '#fdf2f8',
+                                    padding: '2px 4px',
+                                    borderRadius: '4px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '2px',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    fontWeight: '600',
+                                    height: '20px',
+                                    minHeight: '20px',
+                                    marginTop: '4px'
+                                  }}
+                                >
+                                  🎂 {isPrivate ? '생신' : `${evt.name} 생일`}
+                                  {evt.isLunar && <span style={{ fontSize: '8px', opacity: 0.8 }}>(음)</span>}
+                                </div>
+                              );
+                            }
+
+                            // Render regular appointment
+                            else if (evt.type === 'appointment') {
+                              const displayTitle = isPrivate ? '약속' : evt.title;
+                              if (aptViewMode === 'dot') {
+                                elements.push(
+                                  <div 
+                                    key={evt.id} 
+                                    className="appointment-dot-item"
+                                    draggable
+                                    onDragStart={(e) => handleDragStart(e, evt.id)}
+                                    title={`${evt.title} (${evt.time})`}
+                                    style={{ height: '20px', minHeight: '20px', marginTop: '4px', display: 'flex', alignItems: 'center' }}
+                                  >
+                                    <span className={`dot-indicator ${isPrivate ? 'private' : ''}`}></span>
+                                    <span>{displayTitle}</span>
+                                  </div>
+                                );
+                              } else if (aptViewMode === 'both') {
+                                elements.push(
+                                  <div 
+                                    key={evt.id} 
+                                    className={`appointment-box-item ${isPrivate ? 'private' : ''}`}
+                                    draggable
+                                    onDragStart={(e) => handleDragStart(e, evt.id)}
+                                    title={`${evt.title} (${evt.time})`}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '20px', minHeight: '20px', marginTop: '4px' }}
+                                  >
+                                    <span className={`dot-indicator ${isPrivate ? 'private' : ''}`} style={{ width: '5px', height: '5px', margin: 0, flexShrink: 0 }}></span>
+                                    {evt.time && <span style={{ opacity: 0.8, fontSize: '8px', marginRight: '3px' }}>{evt.time}</span>}
+                                    {displayTitle}
+                                  </div>
+                                );
+                              } else {
+                                elements.push(
+                                  <div 
+                                    key={evt.id} 
+                                    className={`appointment-box-item ${isPrivate ? 'private' : ''}`}
+                                    draggable
+                                    onDragStart={(e) => handleDragStart(e, evt.id)}
+                                    title={`${evt.title} (${evt.time})`}
+                                    style={{ height: '20px', minHeight: '20px', marginTop: '4px' }}
+                                  >
+                                    {evt.time && <span style={{ opacity: 0.8, fontSize: '8px', marginRight: '3px' }}>{evt.time}</span>}
+                                    {displayTitle}
+                                  </div>
+                                );
+                              }
+                            }
+                          } else {
+                            // Spacer placeholder to push subsequent events to their correct slot row
+                            elements.push(
+                              <div 
+                                key={`placeholder-${idx}-${s}`}
+                                style={{ 
+                                  height: '20px', 
+                                  minHeight: '20px', 
+                                  marginTop: '4px',
+                                  visibility: 'hidden'
+                                }} 
+                              />
+                            );
+                          }
+                        }
+
+                        return elements;
+                      })()}
+                    </div>
+
+                    {/* Inline Hover Action to Add Event */}
+                    <button 
+                      className="cell-add-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddEventClick(dateStr);
+                      }}
+                      style={{
+                        position: 'absolute',
+                        bottom: '4px',
+                        right: '4px',
+                        opacity: 0,
+                        transition: 'opacity 0.2s',
+                        padding: '2px',
+                        borderRadius: '50%',
+                        backgroundColor: 'var(--primary-light)',
+                        color: 'var(--primary)'
+                      }}
+                      onMouseEnter={(e) => e.target.style.opacity = 1}
+                    >
+                      <Plus size={12} />
+                    </button>
+                  </div>
+                );
+              })}
+
+              {/* Render absolute-positioned multi-day events for this week */}
+              {(() => {
+                const uniqueWeekMultiDayEvents = weekEventsList.filter(evt => evt.startDate && evt.endDate);
+                return uniqueWeekMultiDayEvents.map(evt => {
+                  const slotIdx = weekSlotsInfo.slots[evt.id];
+                  
+                  // Calculate start and end column index within this week
+                  const startCol = weekDays.findIndex(d => formatDateString(d.date) === evt.startDate);
+                  const endCol = weekDays.findIndex(d => formatDateString(d.date) === evt.endDate);
+                  const startColIdx = startCol !== -1 ? startCol : 0;
+                  const endColIdx = endCol !== -1 ? endCol : 6;
+                  
+                  const isActualStart = startCol !== -1;
+                  const isActualEnd = endCol !== -1;
+                  
+                  const borderRadiusStyle = `${isActualStart ? '10px' : '0'} ${isActualEnd ? '10px' : '0'} ${isActualEnd ? '10px' : '0'} ${isActualStart ? '10px' : '0'}`;
+                  
+                  let bg = '#e0f2fe';
+                  let text = '#0369a1';
+                  if (evt.color === 'purple') { bg = '#f3e8ff'; text = '#6b21a8'; }
+                  if (evt.color === 'emerald') { bg = '#dcfce7'; text = '#166534'; }
+                  
+                  const isPrivate = evt.isPrivate && isPrivateMode;
+                  
+                  const leftGap = isActualStart ? '4px' : '-2px';
+                  const rightGap = isActualEnd ? '4px' : '-2px';
+                  
+                  return (
+                    <div 
+                      key={evt.id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, evt.id)}
+                      style={{
+                        position: 'absolute',
+                        gridColumn: `${startColIdx + 1} / ${endColIdx + 2}`,
+                        top: `${38 + slotIdx * 28}px`,
+                        left: leftGap,
+                        right: rightGap,
+                        height: '20px',
+                        backgroundColor: bg,
+                        color: text,
+                        fontSize: '10px',
+                        fontWeight: '600',
+                        padding: '0 8px',
+                        borderRadius: borderRadiusStyle,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '2px',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+                        zIndex: 5,
+                        pointerEvents: 'auto'
+                      }}
+                    >
+                      {isActualStart && <span style={{ marginRight: '2px' }}>✈️</span>}
+                      {(isActualStart || startColIdx === 0) && (isPrivate ? '일정 있음' : evt.title)}
+                    </div>
+                  );
+                });
+              })()}
             </div>
           );
         })}
@@ -413,3 +614,4 @@ export default function CalendarGrid({
     </div>
   );
 }
+
