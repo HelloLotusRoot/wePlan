@@ -53,6 +53,8 @@ public class CalendarEvent {
     // Sharing fields
     private String shareScope; // "public", "private", "custom"
     
+    private String displayMode; // "dot" or "box"
+    
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "calendar_event_sharing_friends", joinColumns = @JoinColumn(name = "event_id"))
     @Column(name = "friend_id")

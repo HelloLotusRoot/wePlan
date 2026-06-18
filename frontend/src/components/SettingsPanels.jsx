@@ -34,10 +34,14 @@ export default function SettingsPanels({
   onlyHolidayCalendar = false,
   hideSharedSettings = false,
   onlySharedSettings = false,
+  onlyScheduleSettings = false,
+  onlyAlarmSettings = false,
+  onlyBirthdaySettings = false,
   relationGroups = ['친구', '연인', '가족'],
   setRelationGroups,
   calendarPerspective,
-  setCalendarPerspective
+  setCalendarPerspective,
+  currentTab
 }) {
   // Local state for forms
   // 1. Shift times/colors (Dynamic Array)
@@ -47,6 +51,14 @@ export default function SettingsPanels({
   useEffect(() => {
     setLocalShifts(Array.isArray(shifts) ? [...shifts] : []);
   }, [shifts]);
+
+  const showSchedule = onlyScheduleSettings || (!onlyHolidayCalendar && !onlySharedSettings && !onlyAlarmSettings && !onlyBirthdaySettings);
+  const showAlarm = onlyAlarmSettings || (!onlyHolidayCalendar && !onlySharedSettings && !onlyScheduleSettings && !onlyBirthdaySettings);
+  const showHoliday = onlyHolidayCalendar || (!onlySharedSettings && !onlyScheduleSettings && !onlyAlarmSettings && !onlyBirthdaySettings && !hideHolidayCalendar);
+  const showShared = onlySharedSettings || (!onlyHolidayCalendar && !onlyScheduleSettings && !onlyAlarmSettings && !onlyBirthdaySettings && !hideSharedSettings);
+  const showBirthday = onlyBirthdaySettings || (!onlyHolidayCalendar && !onlySharedSettings && !onlyScheduleSettings && !onlyAlarmSettings);
+
+
 
   const handleAddLocalShift = () => {
     const colors = ['#10b981', '#f97316', '#818cf8', '#3b82f6', '#f43f5e', '#ec4899', '#64748b'];
@@ -173,14 +185,14 @@ export default function SettingsPanels({
   return (
     <div className="settings-section-container">
       {/* 1. 스케줄 설정 */}
-      {!onlyHolidayCalendar && !onlySharedSettings && (
+      {showSchedule && (
       <div className="settings-panel-card" id="card-schedule">
         <h3 className="panel-title">
           <Clock size={16} color="var(--primary)" />
           <span>근무 유형 설정</span>
         </h3>
         
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '380px', overflowY: 'auto', paddingRight: '4px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {/* Shift Inputs loop */}
           {localShifts.map((shift, index) => {
             const colors = ['#10b981', '#f97316', '#818cf8', '#3b82f6', '#f43f5e', '#ec4899', '#64748b'];
@@ -244,7 +256,7 @@ export default function SettingsPanels({
                 {/* Time range & defaultOvertime inputs */}
                 <div className="settings-input-group" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   {/* Start Time Picker */}
-                  <div style={{ position: 'relative', flex: 1 }}>
+                  <div style={{ position: 'relative', flex: 1, overflow: 'visible' }}>
                     <input 
                       type="text" 
                       readOnly
@@ -261,6 +273,7 @@ export default function SettingsPanels({
                           setLocalShifts(updated);
                         }}
                         onClose={() => setOpenTimePicker(null)}
+                        align="left"
                       />
                     )}
                   </div>
@@ -268,7 +281,7 @@ export default function SettingsPanels({
                   <span style={{ fontSize: '11px' }}>~</span>
                   
                   {/* End Time Picker */}
-                  <div style={{ position: 'relative', flex: 1 }}>
+                  <div style={{ position: 'relative', flex: 1, overflow: 'visible' }}>
                     <input 
                       type="text" 
                       readOnly
@@ -285,6 +298,7 @@ export default function SettingsPanels({
                           setLocalShifts(updated);
                         }}
                         onClose={() => setOpenTimePicker(null)}
+                        align="right"
                       />
                     )}
                   </div>
@@ -306,13 +320,14 @@ export default function SettingsPanels({
           <button onClick={handleShiftSave} className="btn-save" style={{ marginTop: '8px' }}>
             저장
           </button>
+
         </div>
       </div>
       )}
 
 
       {/* 2. 알림 설정 */}
-      {!onlyHolidayCalendar && !onlySharedSettings && (
+      {showAlarm && (
       <div className="settings-panel-card" id="card-alarm">
         <h3 className="panel-title">
           <Bell size={16} color="var(--primary)" />
@@ -377,7 +392,7 @@ export default function SettingsPanels({
       )}
 
       {/* 3. 공휴일 캘린더 */}
-      {!hideHolidayCalendar && !onlySharedSettings && (
+      {showHoliday && (
       <div className="settings-panel-card" id="card-holiday">
         <h3 className="panel-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -442,7 +457,7 @@ export default function SettingsPanels({
       )}
 
       {/* 4. 일정 공유 */}
-      {!onlyHolidayCalendar && !hideSharedSettings && (
+      {showShared && (
       <div className="settings-panel-card" id="card-shared">
         <h3 className="panel-title">
           <Users size={16} color="#10b981" />
@@ -666,7 +681,7 @@ export default function SettingsPanels({
 
 
       {/* 6. 생일 설정 */}
-      {!onlyHolidayCalendar && !onlySharedSettings && (
+      {showBirthday && (
       <div className="settings-panel-card" id="card-birthday">
         <h3 className="panel-title">
           <Cake size={16} color="#db2777" />
@@ -721,25 +736,25 @@ export default function SettingsPanels({
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', borderTop: '1px solid var(--border-color)', paddingTop: '6px' }}>
             <div className="toggle-switch-row" style={{ fontSize: '11px' }}>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>생일 당일 알림</span>
-              <label className="switch" style={{ width: '30px', height: '16px' }}>
+              <label className="switch">
                 <input 
                   type="checkbox" 
                   checked={bdayAlarmOnDay}
                   onChange={(e) => setBdayAlarmOnDay(e.target.checked)}
                 />
-                <span className="slider" style={{ borderRadius: '16px' }}></span>
+                <span className="slider"></span>
               </label>
             </div>
             
             <div className="toggle-switch-row" style={{ fontSize: '11px' }}>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>1주일 전 알림</span>
-              <label className="switch" style={{ width: '30px', height: '16px' }}>
+              <label className="switch">
                 <input 
                   type="checkbox" 
                   checked={bdayAlarmWeekBefore}
                   onChange={(e) => setBdayAlarmWeekBefore(e.target.checked)}
                 />
-                <span className="slider" style={{ borderRadius: '16px' }}></span>
+                <span className="slider"></span>
               </label>
             </div>
           </div>
@@ -753,7 +768,6 @@ export default function SettingsPanels({
     </div>
   );
 }
-
 // Time picker dropdown & format helpers
 const formatTimeLabel = (timeStr) => {
   if (!timeStr || !timeStr.includes(':')) return timeStr || '';
@@ -767,7 +781,7 @@ const formatTimeLabel = (timeStr) => {
   return `${ampm} ${formattedH}:${formattedM}`;
 };
 
-function TimePickerDropdown({ value, onChange, onClose }) {
+function TimePickerDropdown({ value, onChange, onClose, align = 'left' }) {
   const [hStr, mStr] = (value || "09:00").split(':');
   const initH = parseInt(hStr, 10);
   const initM = parseInt(mStr, 10);
@@ -778,6 +792,25 @@ function TimePickerDropdown({ value, onChange, onClose }) {
 
   const hours = Array.from({ length: 12 }, (_, i) => i + 1); // 1 ~ 12
   const minutes = Array.from({ length: 12 }, (_, i) => i * 5); // 00, 05, 10 ... 55 (5분 단위)
+
+  const ampmRef = React.useRef(null);
+  const hoursRef = React.useRef(null);
+  const minutesRef = React.useRef(null);
+
+  useEffect(() => {
+    // Scroll active items into view on mount
+    setTimeout(() => {
+      [ampmRef, hoursRef, minutesRef].forEach(ref => {
+        if (ref.current) {
+          const activeEl = ref.current.querySelector('.dropdown-item.active');
+          if (activeEl) {
+            const container = ref.current;
+            container.scrollTop = activeEl.offsetTop - container.clientHeight / 2 + activeEl.clientHeight / 2;
+          }
+        }
+      });
+    }, 50);
+  }, []);
 
   const handleSelect = (newAmpm, newHour, newMin) => {
     let h = newHour;
@@ -799,6 +832,7 @@ function TimePickerDropdown({ value, onChange, onClose }) {
         className="custom-dropdown-menu" 
         style={{ 
           display: 'flex', 
+          flexDirection: 'row',
           gap: '0', 
           padding: '4px', 
           width: '180px', 
@@ -807,12 +841,16 @@ function TimePickerDropdown({ value, onChange, onClose }) {
           overflow: 'hidden',
           position: 'absolute',
           top: '100%',
-          left: 0,
+          left: align === 'left' ? 0 : 'auto',
+          right: align === 'right' ? 0 : 'auto',
           marginTop: '4px'
         }}
       >
         {/* 오전/오후 */}
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border-color)' }}>
+        <div 
+          ref={ampmRef}
+          style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border-color)' }}
+        >
           {['오전', '오후'].map(ampm => {
             const active = ampm === currentAmpm;
             return (
@@ -829,7 +867,10 @@ function TimePickerDropdown({ value, onChange, onClose }) {
         </div>
 
         {/* 시 */}
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border-color)' }}>
+        <div 
+          ref={hoursRef}
+          style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border-color)' }}
+        >
           {hours.map(h => {
             const active = h === currentHour;
             const formattedH = String(h).padStart(2, '0');
@@ -847,7 +888,10 @@ function TimePickerDropdown({ value, onChange, onClose }) {
         </div>
 
         {/* 분 */}
-        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        <div 
+          ref={minutesRef}
+          style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}
+        >
           {minutes.map(m => {
             const active = m === currentMinute;
             const formattedM = String(m).padStart(2, '0');

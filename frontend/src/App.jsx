@@ -4,6 +4,7 @@ import CalendarGrid from './components/CalendarGrid';
 import SidebarRight from './components/SidebarRight';
 import SettingsPanels from './components/SettingsPanels';
 import StatsDashboard from './components/StatsDashboard';
+import RecordsBoard from './components/RecordsBoard';
 
 import { 
   Plus, 
@@ -15,11 +16,15 @@ import {
   Smartphone, 
   Layers, 
   BellRing,
+  Bell,
   HelpCircle,
   Clock,
   MapPin,
   Check,
-  Settings
+  Settings,
+  Edit3,
+  CalendarDays,
+  Cake
 } from 'lucide-react';
 import { lunarToSolar } from './utils/lunarCalendar';
 import { fetchHolidays, getHoliday } from './utils/holidays';
@@ -206,6 +211,8 @@ export default function App() {
 
   // UI Control states
   const [currentTab, setCurrentTab] = useState('calendar');
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settingsModalTab, setSettingsModalTab] = useState('schedule'); // 'schedule' | 'alarm' | 'birthday'
   const [rightSidebarWidth, setRightSidebarWidth] = useState(() => {
     const saved = localStorage.getItem('weplan_right_sidebar_width');
     const parsed = saved ? parseInt(saved, 10) : 340;
@@ -243,6 +250,7 @@ export default function App() {
   });
   const [showAddModal, setShowAddModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
+  const [viewTarget, setViewTarget] = useState(null); // 상세보기 대상 이벤트
 
   const [formType, setFormType] = useState('shift'); // shift, appointment
   const [formShiftType, setFormShiftType] = useState('day');
@@ -497,21 +505,19 @@ export default function App() {
     api.saveSharedUsers(sharedUsers);
   }, [dataLoaded, sharedUsers]);
 
-  // Scroll to selected settings card when tab changes (keeps calendar on screen)
+  // Open Settings Modal when sidebar tab changes to settings categories
   useEffect(() => {
     if (currentTab === 'calendar') {
       setCalendarPerspective('me');
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else if (currentTab && currentTab !== 'settings' && currentTab !== 'stats' && currentTab !== 'shared') {
-      const idMap = {
-        schedule: 'card-schedule',
-        alarm: 'card-alarm',
-        records: 'card-birthday'
-      };
-      const element = document.getElementById(idMap[currentTab]);
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+    } else if (currentTab === 'schedule') {
+      setCurrentTab('calendar');
+      setSettingsModalTab('schedule');
+      setShowSettingsModal(true);
+    } else if (currentTab === 'alarm') {
+      setCurrentTab('calendar');
+      setSettingsModalTab('alarm');
+      setShowSettingsModal(true);
     }
   }, [currentTab]);
 
@@ -638,6 +644,11 @@ export default function App() {
     setFormShareScope('public');
     setFormSharedWithIds(sharedUsers.map(u => u.id));
     setShowAddModal(true);
+  };
+
+  // View Event Detail (상세보기 모달)
+  const handleViewEvent = (evt) => {
+    setViewTarget(evt);
   };
 
   // Edit Event trigger
@@ -921,7 +932,7 @@ export default function App() {
             events={events}
             shifts={shifts}
             onAddEventClick={handleOpenAddModal}
-            onEditEvent={handleEditEvent}
+            onEditEvent={handleViewEvent}
             onDeleteEvent={handleDeleteEvent}
             isPrivateMode={isPrivateMode}
             holidaysMap={holidaysMap}
@@ -974,8 +985,44 @@ export default function App() {
             shifts={shifts}
             currentDate={currentDate}
           />
+        ) : currentTab === 'records' ? (
+          <RecordsBoard 
+            events={events}
+            onAddBirthday={handleAddBirthday}
+            onDeleteEvent={(id) => {
+              if (window.confirm('이 생일 정보를 삭제하시겠습니까?')) {
+                setEvents(prev => prev.filter(e => e.id !== id));
+              }
+            }}
+          />
         ) : (
           <>
+            {/* Top Configuration Panels for Sharing */}
+            {currentTab === 'shared' && (
+              <div style={{ marginBottom: '20px' }}>
+                <SettingsPanels 
+                  shifts={shifts}
+                  setShifts={setShifts}
+                  alarmSettings={alarmSettings}
+                  setAlarmSettings={setAlarmSettings}
+                  settings={settings}
+                  setSettings={setSettings}
+                  sharedUsers={sharedUsers}
+                  setSharedUsers={setSharedUsers}
+                  isPrivateMode={isPrivateMode}
+                  setIsPrivateMode={setIsPrivateMode}
+                  onAddBirthday={handleAddBirthday}
+                  hideHolidayCalendar={true}
+                  hideSharedSettings={false}
+                  onlySharedSettings={true}
+                  relationGroups={relationGroups}
+                  setRelationGroups={setRelationGroups}
+                  calendarPerspective={calendarPerspective}
+                  setCalendarPerspective={setCalendarPerspective}
+                />
+              </div>
+            )}
+
             <CalendarGrid 
               currentDate={currentDate}
               setCurrentDate={setCurrentDate}
@@ -994,7 +1041,7 @@ export default function App() {
               }}
               selectedDay={selectedDay}
               onAddEventClick={handleOpenAddModal}
-              onEditEvent={handleEditEvent}
+              onEditEvent={handleViewEvent}
               isPrivateMode={isPrivateMode}
               holidaysMap={holidaysMap}
               calendarPerspective={calendarPerspective}
@@ -1006,28 +1053,10 @@ export default function App() {
               currentTab={currentTab}
               primaryShiftMap={primaryShiftMap}
               setPrimaryShiftMap={setPrimaryShiftMap}
-            />
-
-            {/* Bottom Configuration Panels */}
-            <SettingsPanels 
-              shifts={shifts}
-              setShifts={setShifts}
-              alarmSettings={alarmSettings}
-              setAlarmSettings={setAlarmSettings}
-              settings={settings}
-              setSettings={setSettings}
-              sharedUsers={sharedUsers}
-              setSharedUsers={setSharedUsers}
-              isPrivateMode={isPrivateMode}
-              setIsPrivateMode={setIsPrivateMode}
-              onAddBirthday={handleAddBirthday}
-              hideHolidayCalendar={true}
-              hideSharedSettings={currentTab === 'calendar'}
-              onlySharedSettings={currentTab === 'shared'}
-              relationGroups={relationGroups}
-              setRelationGroups={setRelationGroups}
-              calendarPerspective={calendarPerspective}
-              setCalendarPerspective={setCalendarPerspective}
+              onOpenSettings={(tab) => {
+                setSettingsModalTab(tab);
+                setShowSettingsModal(true);
+              }}
             />
 
             {/* Mobile Mockup Simulator title */}
@@ -1203,7 +1232,7 @@ export default function App() {
                       
                       <div className="toggle-switch-row">
                         <span>전날 18:00 알람</span>
-                        <label className="switch" style={{ width: '36px', height: '20px' }}>
+                        <label className="switch">
                           <input type="checkbox" defaultChecked />
                           <span className="slider"></span>
                         </label>
@@ -1211,7 +1240,7 @@ export default function App() {
 
                       <div className="toggle-switch-row">
                         <span>1시간 전 알림</span>
-                        <label className="switch" style={{ width: '36px', height: '20px' }}>
+                        <label className="switch">
                           <input type="checkbox" />
                           <span className="slider"></span>
                         </label>
@@ -1248,6 +1277,269 @@ export default function App() {
           </>
         )}
       </main>
+
+      {/* 3-b. Event Detail View Modal */}
+      {viewTarget && (() => {
+        const evt = viewTarget;
+        const isShift = evt.type === 'shift';
+        const shiftData = isShift ? (Array.isArray(shifts) ? shifts.find(s => s.id === evt.shiftType) : null) : null;
+        const isBirthday = evt.type === 'birthday';
+
+        const colorMap = { blue: '#3b82f6', purple: '#a855f7', emerald: '#10b981', orange: '#f97316', pink: '#ec4899' };
+        const accentColor = isShift && shiftData ? shiftData.color : (colorMap[evt.color] || '#3b82f6');
+        const bgColor = accentColor + '12';
+        const borderColor = accentColor + '40';
+
+        const displayDate = evt.startDate
+          ? `${evt.startDate} ~ ${evt.endDate}`
+          : (evt.date || selectedDay);
+        const displayTime = isBirthday
+          ? (evt.isLunar ? '음력 생일' : '양력 생일')
+          : isShift && shiftData
+            ? `${shiftData.start} - ${shiftData.end}`
+            : evt.time || '하루 종일';
+        const displayTitle = isBirthday
+          ? `${evt.name || ''} 생일`
+          : isShift && shiftData
+            ? shiftData.label
+            : evt.title || '(제목 없음)';
+
+        return (
+          <div className="dialog-overlay" onClick={() => setViewTarget(null)}>
+            <div
+              className="dialog-content"
+              onClick={e => e.stopPropagation()}
+              style={{ maxWidth: '400px', padding: '0', overflow: 'hidden', borderRadius: '16px' }}
+            >
+              {/* 컬러 헤더 */}
+              <div style={{
+                background: `linear-gradient(135deg, ${accentColor}22, ${accentColor}08)`,
+                borderBottom: `1px solid ${borderColor}`,
+                padding: '20px 20px 16px 20px',
+                position: 'relative'
+              }}>
+                <button
+                  onClick={() => setViewTarget(null)}
+                  style={{
+                    position: 'absolute', top: '14px', right: '14px',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--text-muted)', padding: '4px', borderRadius: '6px'
+                  }}
+                >
+                  <X size={16} />
+                </button>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+                  <div style={{
+                    width: '36px', height: '36px', borderRadius: '10px',
+                    backgroundColor: accentColor + '22',
+                    border: `1.5px solid ${accentColor}55`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0
+                  }}>
+                    {isBirthday
+                      ? <Cake size={18} color={accentColor} />
+                      : isShift
+                        ? <CalendarDays size={18} color={accentColor} />
+                        : <CalendarDays size={18} color={accentColor} />
+                    }
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '17px', fontWeight: '700', color: 'var(--text-main)', lineHeight: 1.2 }}>
+                      {displayTitle}
+                    </div>
+                    {isShift && (
+                      <span style={{
+                        fontSize: '10px', fontWeight: '700',
+                        backgroundColor: accentColor + '22',
+                        color: accentColor,
+                        padding: '1px 7px', borderRadius: '10px', marginTop: '4px', display: 'inline-block'
+                      }}>스케줄</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 상세 정보 */}
+              <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {/* 날짜 */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', color: 'var(--text-muted)' }}>
+                  <CalendarDays size={14} style={{ flexShrink: 0 }} />
+                  <span>{displayDate}</span>
+                </div>
+
+                {/* 시간 */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', color: 'var(--text-muted)' }}>
+                  <Clock size={14} style={{ flexShrink: 0 }} />
+                  <span>{displayTime}</span>
+                  {isShift && parseFloat(evt.overtimeHours) > 0 && (
+                    <span style={{
+                      fontSize: '11px', fontWeight: '700',
+                      backgroundColor: accentColor + '22', color: accentColor,
+                      padding: '1px 7px', borderRadius: '10px'
+                    }}>초과근무 +{evt.overtimeHours}h</span>
+                  )}
+                </div>
+
+                {/* 장소 */}
+                {evt.place && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', color: 'var(--text-muted)' }}>
+                    <MapPin size={14} style={{ flexShrink: 0 }} />
+                    <span>{evt.place}</span>
+                  </div>
+                )}
+
+                {/* 비공개 */}
+                {evt.isPrivate && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '12px', color: '#94a3b8' }}>
+                    <Lock size={13} style={{ flexShrink: 0 }} />
+                    <span>비공개 일정</span>
+                  </div>
+                )}
+
+                {/* 참여자 */}
+                {evt.participants && evt.participants.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '13px', color: 'var(--text-muted)' }}>
+                    <User size={14} style={{ flexShrink: 0 }} />
+                    {evt.participants.map((p, i) => (
+                      <span key={i} style={{
+                        fontSize: '11px', backgroundColor: 'var(--bg-sub)',
+                        padding: '2px 8px', borderRadius: '20px',
+                        border: '1px solid var(--border-color)'
+                      }}>{p.name}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 하단 수정 / 삭제 버튼 */}
+              {!isReadOnlyPerspective && !isBirthday && (
+                <div style={{
+                  padding: '12px 20px 20px 20px',
+                  display: 'flex', gap: '8px', justifyContent: 'flex-end',
+                  borderTop: '1px solid var(--border-color)'
+                }}>
+                  <button
+                    onClick={() => {
+                      setViewTarget(null);
+                      handleDeleteEvent(evt.id);
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '5px',
+                      padding: '8px 14px', borderRadius: '8px',
+                      backgroundColor: '#fee2e2', color: '#ef4444',
+                      border: '1px solid #fca5a5', cursor: 'pointer',
+                      fontSize: '13px', fontWeight: '600'
+                    }}
+                  >
+                    <Trash2 size={13} />
+                    삭제
+                  </button>
+                  <button
+                    onClick={() => {
+                      setViewTarget(null);
+                      handleEditEvent(evt);
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '5px',
+                      padding: '8px 16px', borderRadius: '8px',
+                      backgroundColor: accentColor, color: '#ffffff',
+                      border: 'none', cursor: 'pointer',
+                      fontSize: '13px', fontWeight: '600'
+                    }}
+                  >
+                    <Edit3 size={13} />
+                    수정
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Settings Modal overlay */}
+      {showSettingsModal && (
+        <div className="dialog-overlay" onClick={() => setShowSettingsModal(false)}>
+          <div 
+            className="dialog-content" 
+            onClick={e => e.stopPropagation()}
+            style={{ 
+              width: '480px', 
+              maxWidth: '95%', 
+              maxHeight: '90vh', 
+              overflowY: 'auto',
+              padding: '20px'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <Settings size={18} color="var(--primary)" />
+                <span style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-main)' }}>설정</span>
+              </div>
+              <button 
+                onClick={() => setShowSettingsModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Tabs */}
+            <div style={{ display: 'flex', gap: '4px', backgroundColor: '#f1f5f9', padding: '4px', borderRadius: '8px', marginBottom: '12px' }}>
+              <button 
+                onClick={() => setSettingsModalTab('schedule')} 
+                className={`view-toggle-btn ${settingsModalTab === 'schedule' ? 'active' : ''}`}
+                style={{ flex: 1, padding: '6px', fontSize: '12px', borderRadius: '6px', cursor: 'pointer' }}
+              >
+                근무 유형
+              </button>
+              <button 
+                onClick={() => setSettingsModalTab('alarm')} 
+                className={`view-toggle-btn ${settingsModalTab === 'alarm' ? 'active' : ''}`}
+                style={{ flex: 1, padding: '6px', fontSize: '12px', borderRadius: '6px', cursor: 'pointer' }}
+              >
+                알림 설정
+              </button>
+              <button 
+                onClick={() => setSettingsModalTab('birthday')} 
+                className={`view-toggle-btn ${settingsModalTab === 'birthday' ? 'active' : ''}`}
+                style={{ flex: 1, padding: '6px', fontSize: '12px', borderRadius: '6px', cursor: 'pointer' }}
+              >
+                생일 설정
+              </button>
+            </div>
+
+            {/* Content: SettingsPanels */}
+            <div style={{ flex: 1 }}>
+              <SettingsPanels 
+                shifts={shifts}
+                setShifts={setShifts}
+                alarmSettings={alarmSettings}
+                setAlarmSettings={setAlarmSettings}
+                settings={settings}
+                setSettings={setSettings}
+                sharedUsers={sharedUsers}
+                setSharedUsers={setSharedUsers}
+                isPrivateMode={isPrivateMode}
+                setIsPrivateMode={setIsPrivateMode}
+                onAddBirthday={handleAddBirthday}
+                hideHolidayCalendar={true}
+                hideSharedSettings={true}
+                onlyScheduleSettings={settingsModalTab === 'schedule'}
+                onlyAlarmSettings={settingsModalTab === 'alarm'}
+                onlyBirthdaySettings={settingsModalTab === 'birthday'}
+                relationGroups={relationGroups}
+                setRelationGroups={setRelationGroups}
+                calendarPerspective={calendarPerspective}
+                setCalendarPerspective={setCalendarPerspective}
+                currentTab={currentTab}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 4. Add/Edit Shift or Appointment Modal overlay */}
       {showAddModal && (

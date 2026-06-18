@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getLunarDate, lunarToSolar } from '../utils/lunarCalendar';
 import { getHoliday } from '../utils/holidays';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, MapPin, Sparkles, Cake, Menu, PanelRight, PanelRightClose } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, MapPin, Sparkles, Cake, Menu, PanelRight, PanelRightClose, Clock, Bell } from 'lucide-react';
 
 export default function CalendarGrid({ 
   currentDate, 
@@ -28,7 +28,8 @@ export default function CalendarGrid({
   setShowRightSidebar,
   currentTab,
   primaryShiftMap = {},
-  setPrimaryShiftMap
+  setPrimaryShiftMap,
+  onOpenSettings
 }) {
   const [draggedEventId, setDraggedEventId] = useState(null);
   const yearMenuRef = useRef(null);
@@ -1097,6 +1098,42 @@ export default function CalendarGrid({
             </div>
           );
         })}
+      </div>
+
+      {/* Calendar Bottom Quick Settings Buttons */}
+      <div style={{ 
+        display: 'flex', 
+        gap: '10px', 
+        justifyContent: 'center', 
+        marginTop: '20px', 
+        paddingTop: '16px',
+        borderTop: '1px solid var(--border-color)',
+        flexWrap: 'wrap' 
+      }}>
+        <button 
+          onClick={() => onOpenSettings && onOpenSettings('schedule')} 
+          className="btn-secondary"
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: '#ffffff' }}
+        >
+          <Clock size={15} color="var(--primary)" />
+          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-main)' }}>근무 유형 설정</span>
+        </button>
+        <button 
+          onClick={() => onOpenSettings && onOpenSettings('alarm')} 
+          className="btn-secondary"
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: '#ffffff' }}
+        >
+          <Bell size={15} color="var(--primary)" />
+          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-main)' }}>알림 설정</span>
+        </button>
+        <button 
+          onClick={() => onOpenSettings && onOpenSettings('birthday')} 
+          className="btn-secondary"
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: '#ffffff' }}
+        >
+          <Cake size={15} color="#db2777" />
+          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-main)' }}>생일 설정</span>
+        </button>
       </div>
     </div>
   );
