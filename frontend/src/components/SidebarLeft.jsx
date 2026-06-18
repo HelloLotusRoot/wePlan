@@ -21,7 +21,9 @@ export default function SidebarLeft({
   userName,
   setUserName,
   userJob,
-  setUserJob
+  setUserJob,
+  calendarPerspective,
+  setCalendarPerspective
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [localName, setLocalName] = useState(userName);
@@ -37,7 +39,7 @@ export default function SidebarLeft({
     { id: 'calendar', label: '캘린더', icon: CalendarIcon },
     { id: 'schedule', label: '스케줄', icon: Clock },
     { id: 'alarm', label: '알림', icon: Bell },
-    { id: 'shared', label: '공유 캘린더', icon: Users },
+    { id: 'shared', label: '일정 공유', icon: Users },
     { id: 'records', label: '기록', icon: FileText },
     { id: 'stats', label: '통계', icon: BarChart3 },
     { id: 'settings', label: '설정', icon: Settings },
@@ -135,30 +137,37 @@ export default function SidebarLeft({
           <span>+ 친구 초대하기</span>
         </button>
 
-        <div className="sharing-title">캘린더 공유 중</div>
+        <div className="sharing-title">일정 공유 친구</div>
         <div className="shared-user-avatars" style={{ paddingLeft: '8px' }}>
-          {sharedUsers.filter(u => u.isSharing).map((user, idx) => (
-            <div 
-              key={user.id} 
-              className="avatar-overlap"
-              title={`${user.name} (${user.relation}) - ${user.privilege}`}
-              style={{ 
-                zIndex: 10 - idx,
-                borderColor: isPrivateMode ? '#cbd5e1' : '#10b981',
-                boxShadow: isPrivateMode ? 'none' : '0 0 4px rgba(16, 185, 129, 0.4)'
-              }}
-            >
-              {user.avatar ? (
-                <img 
-                  src={user.avatar} 
-                  alt={user.name} 
-                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
-                />
-              ) : (
-                user.name.substring(0, 2)
-              )}
-            </div>
-          ))}
+          {sharedUsers.filter(u => u.isSharing).map((user, idx) => {
+            const isActivePerspective = calendarPerspective === user.id;
+            return (
+              <div 
+                key={user.id} 
+                className="avatar-overlap"
+                onClick={() => setCalendarPerspective(isActivePerspective ? 'me' : user.id)}
+                title={`${user.name} (${user.relation}) - ${user.privilege} (클릭 시 이 친구에게 공유된 내 일정 확인)`}
+                style={{ 
+                  zIndex: 10 - idx,
+                  borderColor: isActivePerspective ? '#10b981' : (isPrivateMode ? '#cbd5e1' : '#e2e8f0'),
+                  boxShadow: isActivePerspective ? '0 0 8px #10b981' : (isPrivateMode ? 'none' : '0 0 4px rgba(16, 185, 129, 0.4)'),
+                  transform: isActivePerspective ? 'scale(1.15)' : 'scale(1)',
+                  transition: 'all 0.2s ease',
+                  cursor: 'pointer'
+                }}
+              >
+                {user.avatar ? (
+                  <img 
+                    src={user.avatar} 
+                    alt={user.name} 
+                    style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
+                  />
+                ) : (
+                  user.name.substring(0, 2)
+                )}
+              </div>
+            );
+          })}
           {isPrivateMode && (
             <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '12px' }}>
               나만 보기 활성

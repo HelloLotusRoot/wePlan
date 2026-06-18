@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
-import { getLunarDate } from '../utils/lunarCalendar';
+import React, { useState, useEffect, useRef } from 'react';
+import { getLunarDate, lunarToSolar } from '../utils/lunarCalendar';
 import { getHoliday } from '../utils/holidays';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, MapPin, Sparkles } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, MapPin, Sparkles, Cake, Menu, PanelRight, PanelRightClose } from 'lucide-react';
 
 export default function CalendarGrid({ 
   currentDate, 
   setCurrentDate, 
-  events, 
+  events: rawEvents, 
   shifts, 
   settings, 
   viewMode, 
@@ -17,21 +17,181 @@ export default function CalendarGrid({
   onSelectDay,
   selectedDay,
   onAddEventClick,
+  onEditEvent,
   isPrivateMode,
-  holidaysMap = {}
+  holidaysMap = {},
+  calendarPerspective,
+  setCalendarPerspective,
+  sharedUsers,
+  isReadOnlyPerspective,
+  showRightSidebar,
+  setShowRightSidebar,
+  currentTab,
+  primaryShiftMap = {},
+  setPrimaryShiftMap
 }) {
   const [draggedEventId, setDraggedEventId] = useState(null);
+  const yearMenuRef = useRef(null);
+  const monthMenuRef = useRef(null);
+
+  // Filter events based on perspective
+  const events = rawEvents.filter(evt => {
+    if (evt.type === 'shift') return true;
+    if (evt.type === 'birthday') return true;
+    
+    const scope = evt.shareScope || (evt.isPrivate ? 'private' : 'public');
+    const sharedWith = evt.sharedWith || [];
+    
+    if (calendarPerspective === 'me') {
+      return true; // Owner sees everything
+    } else {
+      if (scope === 'private') return false;
+      if (scope === 'public') return true;
+      if (scope === 'custom') return sharedWith.includes(calendarPerspective);
+      return true;
+    }
+  });
+
+  const getShareIcon = (evt) => {
+    if (calendarPerspective !== 'me') return '';
+    const scope = evt.shareScope || (evt.isPrivate ? 'private' : 'public');
+    if (scope === 'private') return '🔒 ';
+    if (scope === 'custom') return '';
+    return '';
+  };
+
+  const renderSharedAvatars = (evt) => {
+    if (evt.shareScope !== 'custom' || !evt.sharedWith || evt.sharedWith.length === 0) return null;
+    const sharedFriends = (sharedUsers || []).filter(u => evt.sharedWith.includes(u.id));
+    if (sharedFriends.length === 0) return null;
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', marginLeft: '4px', verticalAlign: 'middle', flexShrink: 0 }}>
+        {sharedFriends.map(friend => {
+          const titleText = `${friend.name} (${friend.relation})`;
+          return (
+            <span
+              key={friend.id}
+              title={titleText}
+              style={{
+                width: '14px',
+                height: '14px',
+                borderRadius: '50%',
+                backgroundColor: '#cbd5e1',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '8px',
+                fontWeight: 'bold',
+                color: '#1e293b',
+                border: '1px solid rgba(255,255,255,0.8)',
+                overflow: 'hidden',
+                flexShrink: 0
+              }}
+            >
+              {friend.avatar ? (
+                <img
+                  src={friend.avatar}
+                  alt={friend.name}
+                  style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                />
+              ) : (
+                friend.name.substring(0, 1)
+              )}
+            </span>
+          );
+        })}
+      </span>
+    );
+  };
+
+  const getDotColor = (color) => {
+    if (color === 'purple') return '#a855f7';
+    if (color === 'emerald') return '#10b981';
+    if (color === 'orange') return '#f97316';
+    if (color === 'pink') return '#ec4899';
+    return '#3b82f6'; // default/blue
+  };
+
+  const getBoxColorStyles = (color) => {
+    let bg = '#eff6ff';
+    let text = '#1e3a8a';
+    let border = '#3b82f6';
+    let borderOuter = '#bfdbfe';
+    if (color === 'purple') { bg = '#f3e8ff'; text = '#6b21a8'; border = '#a855f7'; borderOuter = '#d8b4fe'; }
+    else if (color === 'emerald') { bg = '#dcfce7'; text = '#166534'; border = '#10b981'; borderOuter = '#a7f3d0'; }
+    else if (color === 'orange') { bg = '#ffedd5'; text = '#c2410c'; border = '#f97316'; borderOuter = '#fed7aa'; }
+    else if (color === 'pink') { bg = '#fce7f3'; text = '#be185d'; border = '#ec4899'; borderOuter = '#fbcfe8'; }
+    return { 
+      backgroundColor: bg, 
+      color: text, 
+      border: `1px solid ${borderOuter}`,
+      borderLeft: `4px solid ${border}`,
+      fontWeight: '700'
+    };
+  };
+
+  const getBirthdaySolarDateForYear = (evt, targetYear) => {
+    if (evt.isLunar) {
+      let bdayLunar = getLunarDate(evt.date);
+      if (!bdayLunar) {
+        bdayLunar = getLunarDate(`2024-${evt.date.slice(5)}`);
+      }
+      if (bdayLunar) {
+        const clean = bdayLunar.replace("음력 ", "");
+        const isLeap = clean.startsWith("윤");
+        const parts = clean.replace("윤", "").split(".");
+        const month = parseInt(parts[0], 10);
+        const day = parseInt(parts[1], 10);
+        const solar = lunarToSolar(targetYear, month, day, isLeap);
+        if (solar) return solar;
+      }
+      return `${targetYear}-${evt.date.slice(5)}`;
+    } else {
+      return `${targetYear}-${evt.date.slice(5)}`;
+    }
+  };
+
   const [dragOverDate, setDragOverDate] = useState(null);
+  const [isYearOpen, setIsYearOpen] = useState(false);
+  const [isMonthOpen, setIsMonthOpen] = useState(false);
+
+  useEffect(() => {
+    if (isYearOpen && yearMenuRef.current) {
+      const activeEl = yearMenuRef.current.querySelector('.dropdown-item.active');
+      if (activeEl) {
+        const container = yearMenuRef.current;
+        container.scrollTop = activeEl.offsetTop - container.clientHeight / 2 + activeEl.clientHeight / 2;
+      }
+    }
+  }, [isYearOpen]);
+
+  useEffect(() => {
+    if (isMonthOpen && monthMenuRef.current) {
+      const activeEl = monthMenuRef.current.querySelector('.dropdown-item.active');
+      if (activeEl) {
+        const container = monthMenuRef.current;
+        container.scrollTop = activeEl.offsetTop - container.clientHeight / 2 + activeEl.clientHeight / 2;
+      }
+    }
+  }, [isMonthOpen]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
   // Navigation
   const prevMonth = () => {
-    setCurrentDate(new Date(year, month - 1, 1));
+    if (viewMode === 'week') {
+      setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() - 7));
+    } else {
+      setCurrentDate(new Date(year, month - 1, 1));
+    }
   };
   const nextMonth = () => {
-    setCurrentDate(new Date(year, month + 1, 1));
+    if (viewMode === 'week') {
+      setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() + 7));
+    } else {
+      setCurrentDate(new Date(year, month + 1, 1));
+    }
   };
   const goToday = () => {
     setCurrentDate(new Date());
@@ -100,6 +260,10 @@ export default function CalendarGrid({
         if (evt.startDate && evt.endDate) {
           return dateStr >= evt.startDate && dateStr <= evt.endDate;
         }
+        if (evt.type === 'birthday') {
+          const targetYear = parseInt(dateStr.slice(0, 4), 10);
+          return getBirthdaySolarDateForYear(evt, targetYear) === dateStr;
+        }
         return evt.date === dateStr;
       });
 
@@ -145,7 +309,9 @@ export default function CalendarGrid({
         const dateStr = formatDateString(dayCell.date);
         const isActive = (evt.startDate && evt.endDate)
           ? (dateStr >= evt.startDate && dateStr <= evt.endDate)
-          : (evt.date === dateStr);
+          : (evt.type === 'birthday'
+            ? getBirthdaySolarDateForYear(evt, parseInt(dateStr.slice(0, 4), 10)) === dateStr
+            : evt.date === dateStr);
         if (isActive) {
           occupiedDayIndices.push(dayIdx);
         }
@@ -198,16 +364,101 @@ export default function CalendarGrid({
   };
 
   const weeks = [];
-  for (let i = 0; i < dayCells.length; i += 7) {
-    weeks.push(dayCells.slice(i, i + 7));
+  if (viewMode === 'week') {
+    const currentDateStr = formatDateString(currentDate);
+    const targetDayIdx = dayCells.findIndex(cell => formatDateString(cell.date) === currentDateStr);
+    let originalWeekIdx = 0;
+    if (targetDayIdx !== -1) {
+      originalWeekIdx = Math.floor(targetDayIdx / 7);
+      weeks.push({
+        days: dayCells.slice(originalWeekIdx * 7, (originalWeekIdx + 1) * 7),
+        originalWeekIdx
+      });
+    } else {
+      weeks.push({
+        days: dayCells.slice(0, 7),
+        originalWeekIdx: 0
+      });
+    }
+  } else {
+    for (let i = 0; i < dayCells.length; i += 7) {
+      weeks.push({
+        days: dayCells.slice(i, i + 7),
+        originalWeekIdx: i / 7
+      });
+    }
   }
 
   return (
     <div className="calendar-card" style={{ display: 'flex', flexDirection: 'column' }}>
       {/* View Mode Toolbar & Nav */}
       <div className="calendar-header" style={{ marginBottom: '16px', borderBottom: 'none', boxShadow: 'none', padding: '0 0 16px 0' }}>
-        <div className="header-month-nav">
-          <span className="month-title">{year}년 {month + 1}월</span>
+        <div className="header-month-nav" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {/* Year Dropdown */}
+            <div style={{ position: 'relative' }}>
+              <button 
+                onClick={() => {
+                  setIsYearOpen(!isYearOpen);
+                  setIsMonthOpen(false);
+                }}
+                className="calendar-select-btn"
+              >
+                {year}년
+              </button>
+              
+              {isYearOpen && (
+                <>
+                  <div className="dropdown-backdrop" onClick={() => setIsYearOpen(false)} />
+                  <div ref={yearMenuRef} className="custom-dropdown-menu year-menu">
+                    {Array.from({ length: 51 }, (_, i) => new Date().getFullYear() - 10 + i).map(y => (
+                      <div 
+                        key={y}
+                        className={`dropdown-item ${y === year ? 'active' : ''}`}
+                        onClick={() => {
+                          setCurrentDate(new Date(y, month, 1));
+                          setIsYearOpen(false);
+                        }}
+                      >
+                        {y}년
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Month Dropdown */}
+            <div style={{ position: 'relative' }}>
+              <button 
+                onClick={() => {
+                  setIsMonthOpen(!isMonthOpen);
+                  setIsYearOpen(false);
+                }}
+                className="calendar-select-btn"
+              >
+                {month + 1}월
+              </button>
+              
+              {isMonthOpen && (
+                <>
+                  <div className="dropdown-backdrop" onClick={() => setIsMonthOpen(false)} />
+                  <div ref={monthMenuRef} className="custom-dropdown-menu month-menu">
+                    {Array.from({ length: 12 }, (_, i) => i).map(m => (
+                      <div 
+                        key={m}
+                        className={`dropdown-item ${m === month ? 'active' : ''}`}
+                        onClick={() => {
+                          setCurrentDate(new Date(year, m, 1));
+                          setIsMonthOpen(false);
+                        }}
+                      >
+                        {m + 1}월
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           <div style={{ display: 'flex', gap: '4px' }}>
             <button onClick={prevMonth} className="nav-btn"><ChevronLeft size={18} /></button>
             <button onClick={goToday} className="today-btn">오늘</button>
@@ -242,22 +493,97 @@ export default function CalendarGrid({
           </div>
         </div>
 
-        <div className="header-view-toggle">
-          {['월', '주', '일', '목록'].map((v, i) => {
-            const vKeys = ['month', 'week', 'day', 'list'];
-            const active = viewMode === vKeys[i];
-            return (
-              <button 
-                key={v}
-                onClick={() => setViewMode(vKeys[i])} 
-                className={`view-toggle-btn ${active ? 'active' : ''}`}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* Calendar Perspective Selector */}
+          {currentTab === 'shared' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>시점:</span>
+              <select
+                value={calendarPerspective}
+                onChange={(e) => setCalendarPerspective(e.target.value)}
+                style={{
+                  padding: '4px 8px',
+                  fontSize: '11px',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: '#ffffff',
+                  fontWeight: '600',
+                  color: calendarPerspective === 'me' ? 'var(--primary)' : '#10b981',
+                  cursor: 'pointer',
+                  outline: 'none'
+                }}
               >
-                {v}
-              </button>
-            );
-          })}
+                <option value="me">내 시점 (전체 보기)</option>
+                {sharedUsers.map(u => (
+                  <option key={u.id} value={u.id}>
+                    {u.name} 시점 ({u.relation.split(' ')[0]}이 보는 화면)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="header-view-toggle" style={{ display: 'flex', alignItems: 'center' }}>
+            {['월', '주'].map((v, i) => {
+              const vKeys = ['month', 'week'];
+              const active = viewMode === vKeys[i];
+              return (
+                <button 
+                  key={v}
+                  onClick={() => setViewMode(vKeys[i])} 
+                  className={`view-toggle-btn ${active ? 'active' : ''}`}
+                >
+                  {v}
+                </button>
+              );
+            })}
+            
+            <div style={{ 
+              width: '1px', 
+              height: '14px', 
+              backgroundColor: 'var(--border-color)', 
+              marginLeft: '8px',
+              marginRight: '4px',
+              opacity: 0.8
+            }} />
+
+            <button
+              onClick={() => setShowRightSidebar(!showRightSidebar)}
+              className={`view-toggle-btn ${showRightSidebar ? 'active' : ''}`}
+              style={{
+                padding: '6px 8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: showRightSidebar ? 'var(--primary)' : 'var(--text-muted)'
+              }}
+              title={showRightSidebar ? "상세 보기 패널 닫기" : "상세 보기 패널 열기"}
+            >
+              {showRightSidebar ? <PanelRightClose size={16} /> : <PanelRight size={16} />}
+            </button>
+          </div>
         </div>
       </div>
+
+      {calendarPerspective !== 'me' && (
+        <div style={{
+          backgroundColor: '#f0fdf4',
+          border: '1px solid #bbf7d0',
+          borderRadius: '8px',
+          padding: '8px 12px',
+          marginBottom: '12px',
+          fontSize: '12px',
+          color: '#166534',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <span>📢</span>
+          <span>
+            <strong>{sharedUsers.find(u => u.id === calendarPerspective)?.name}</strong>님에게 공유된 내 일정 화면입니다. (비공개 일정 및 지정되지 않은 공유 일정은 숨김 처리됩니다.) {isReadOnlyPerspective && <strong style={{ color: '#dc2626', marginLeft: '6px' }}>(보기 전용 모드)</strong>}
+          </span>
+        </div>
+      )}
 
       {/* Weekday headers */}
       <div className="grid-weekdays">
@@ -272,9 +598,9 @@ export default function CalendarGrid({
       </div>
 
       {/* Grid Days */}
-      <div className="grid-days">
-        {weeks.map((weekDays, weekIdx) => {
-          const weekSlotsInfo = weeksEventsSlots[weekIdx];
+      <div className={`grid-days ${viewMode === 'week' ? 'week-view' : ''}`}>
+        {weeks.map(({ days: weekDays, originalWeekIdx }, weekIdx) => {
+          const weekSlotsInfo = weeksEventsSlots[originalWeekIdx] || { slots: {} };
           
           // Get all events of this week (for multi-day trip event rendering)
           const weekEventsList = [];
@@ -285,6 +611,10 @@ export default function CalendarGrid({
               if (evt.type === 'shift') return false;
               if (evt.startDate && evt.endDate) {
                 return dateStr >= evt.startDate && dateStr <= evt.endDate;
+              }
+              if (evt.type === 'birthday') {
+                const targetYear = parseInt(dateStr.slice(0, 4), 10);
+                return getBirthdaySolarDateForYear(evt, targetYear) === dateStr;
               }
               return evt.date === dateStr;
             });
@@ -311,12 +641,17 @@ export default function CalendarGrid({
                 const lunarDayOnly = lunarDate ? lunarDate.split(' ')[1] : '';
 
                 // Holiday Info
-                const holiday = settings.showKoreanHolidays ? (holidaysMap[dateStr] || getHoliday(dateStr)) : null;
+                const rawHoliday = (settings.showHolidayCalendar && settings.showKoreanHolidays) ? (holidaysMap[dateStr] || getHoliday(dateStr)) : null;
+                const holiday = (rawHoliday && (!rawHoliday.isAlternative || settings.showAlternativeHolidays)) ? rawHoliday : null;
 
                 // Filter events for this day
                 const dayEvents = events.filter(evt => {
                   if (evt.startDate && evt.endDate) {
                     return dateStr >= evt.startDate && dateStr <= evt.endDate;
+                  }
+                  if (evt.type === 'birthday') {
+                    const targetYear = parseInt(dateStr.slice(0, 4), 10);
+                    return getBirthdaySolarDateForYear(evt, targetYear) === dateStr;
                   }
                   return evt.date === dateStr;
                 });
@@ -333,9 +668,21 @@ export default function CalendarGrid({
                 if (isCellToday) cellClass += " today";
                 if (dragOverDate === dateStr) cellClass += " drag-over";
 
-                // Find if there is a shift on this day
-                const dayShiftEvent = dayEvents.find(e => e.type === 'shift');
-                const dayShiftData = dayShiftEvent && Array.isArray(shifts) ? shifts.find(s => s.id === dayShiftEvent.shiftType) : null;
+                // Find if there are shifts on this day
+                const dayShiftEvents = dayEvents.filter(e => e.type === 'shift');
+                const dayShiftsData = dayShiftEvents.map(evt => {
+                  const data = Array.isArray(shifts) ? shifts.find(s => s.id === evt.shiftType) : null;
+                  return { event: evt, data };
+                }).filter(item => item.data !== null)
+                  .sort((a, b) => (a.data.start || '').localeCompare(b.data.start || ''));
+
+                // Determine the primary (representative) shift for this day
+                const savedPrimaryId = primaryShiftMap[dateStr];
+                const mainShiftData = dayShiftsData.length > 0
+                  ? (savedPrimaryId
+                      ? (dayShiftsData.find(s => s.data.id === savedPrimaryId)?.data || dayShiftsData[0].data)
+                      : dayShiftsData[0].data)
+                  : null;
 
                 return (
                   <div 
@@ -346,10 +693,10 @@ export default function CalendarGrid({
                     onDragLeave={handleDragLeave}
                     onDrop={(e) => handleDrop(e, dateStr)}
                     style={
-                      dayShiftEvent && dayShiftData
+                      mainShiftData
                         ? {
-                            backgroundColor: dayShiftData.color + '15',
-                            borderColor: dayShiftData.color + '30',
+                            backgroundColor: mainShiftData.color + '15',
+                            borderColor: mainShiftData.color + '30',
                             borderWidth: '2.5px'
                           }
                         : {}
@@ -365,24 +712,64 @@ export default function CalendarGrid({
                       </span>
 
                       {holiday && (
-                        <span className="holiday-label" style={!dayShiftEvent ? { marginLeft: 'auto' } : {}} title={holiday.name}>{holiday.name}</span>
+                        <span className="holiday-label" style={dayShiftsData.length === 0 ? { marginLeft: 'auto' } : {}} title={holiday.name}>{holiday.name}</span>
                       )}
 
-                      {dayShiftEvent && dayShiftData && (
-                        <span style={{ 
-                          fontSize: '11px', 
-                          fontWeight: '700', 
-                          color: dayShiftData.color,
-                          backgroundColor: dayShiftData.color + '18',
-                          padding: '1px 6px',
-                          borderRadius: '4px',
-                          marginLeft: 'auto'
+                      {dayShiftsData.length > 0 && (
+                        <div style={{ 
+                          display: 'flex', 
+                          gap: '3px', 
+                          flexWrap: 'wrap', 
+                          marginLeft: 'auto',
+                          justifyContent: 'flex-end',
+                          maxWidth: '70%'
                         }}>
-                          {dayShiftData.label}
-                        </span>
+                          {dayShiftsData.map((sData, sIdx) => {
+                            const isPrimary = savedPrimaryId
+                              ? sData.data.id === savedPrimaryId
+                              : sIdx === 0;
+                            const canToggle = !isReadOnlyPerspective && dayShiftsData.length > 1;
+                            return (
+                              <span 
+                                key={sData.event.id || sIdx}
+                                onClick={canToggle ? (e) => {
+                                  e.stopPropagation();
+                                  setPrimaryShiftMap(prev => ({ ...prev, [dateStr]: sData.data.id }));
+                                } : undefined}
+                                style={{ 
+                                  fontSize: '10px', 
+                                  fontWeight: '700', 
+                                  color: sData.data.color,
+                                  backgroundColor: isPrimary ? sData.data.color + '28' : sData.data.color + '12',
+                                  padding: '1px 5px',
+                                  borderRadius: '4px',
+                                  whiteSpace: 'nowrap',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '2px',
+                                  lineHeight: '1.2',
+                                  cursor: canToggle ? 'pointer' : 'default',
+                                  border: isPrimary ? `1.5px solid ${sData.data.color}55` : '1.5px solid transparent',
+                                  transition: 'all 0.15s ease'
+                                }}
+                                title={canToggle
+                                  ? (isPrimary ? `대표 근무: ${sData.data.label}` : `클릭하면 '${sData.data.label}'을 대표로 설정`)
+                                  : `${sData.data.label} (${sData.data.start} ~ ${sData.data.end})${sData.event.overtimeHours ? `, 초과근무: ${sData.event.overtimeHours}시간` : ''}`
+                                }
+                              >
+                                <span>{sData.data.label}</span>
+                                {sData.event.overtimeHours ? (
+                                  <span style={{ fontSize: '9px', opacity: 0.85, marginLeft: '1px' }}>
+                                    (+{sData.event.overtimeHours}h)
+                                  </span>
+                                ) : null}
+                              </span>
+                            );
+                          })}
+                        </div>
                       )}
 
-                      {settings.showLunarAnniversaries && !holiday && lunarDayOnly && !dayShiftEvent && (
+                      {settings.showHolidayCalendar && settings.showLunarAnniversaries && !holiday && lunarDayOnly && dayShiftsData.length === 0 && (
                         <span className="lunar-sub" style={{ marginLeft: 'auto' }}>{lunarDayOnly}</span>
                       )}
                     </div>
@@ -391,123 +778,180 @@ export default function CalendarGrid({
                     <div className="cell-events">
                       {(() => {
                         const dayNonShiftEvents = dayEvents.filter(e => e.type !== 'shift');
+                        const MAX_VISIBLE_EVENTS = viewMode === 'week' ? 20 : 4;
 
-                        // Find maximum slot index active on this specific day
-                        let maxDaySlotIdx = -1;
-                        dayNonShiftEvents.forEach(evt => {
+                        // Split day events into multi-day and single-day
+                        const dayMultiEvents = dayNonShiftEvents.filter(evt => evt.startDate && evt.endDate);
+                        const daySingleEvents = dayNonShiftEvents.filter(evt => !(evt.startDate && evt.endDate));
+
+                        // Sort single-day events: birthdays first, then chronologically by time, then alphabetically by title
+                        daySingleEvents.sort((a, b) => {
+                          if (a.type === 'birthday' && b.type !== 'birthday') return -1;
+                          if (a.type !== 'birthday' && b.type === 'birthday') return 1;
+                          
+                          const timeA = a.time || '00:00';
+                          const timeB = b.time || '00:00';
+                          const timeCmp = timeA.localeCompare(timeB);
+                          if (timeCmp !== 0) return timeCmp;
+                          
+                          return (a.title || a.name || '').localeCompare(b.title || b.name || '');
+                        });
+
+                        const visibleSingles = daySingleEvents.slice(0, MAX_VISIBLE_EVENTS);
+                        const hiddenCount = daySingleEvents.length - visibleSingles.length;
+
+                        // Assign slots to visible elements
+                        const slotToElement = {};
+                        
+                        // 1. Place active multi-day events
+                        dayMultiEvents.forEach(evt => {
                           const slot = weekSlotsInfo.slots[evt.id];
-                          if (slot !== undefined && slot > maxDaySlotIdx) {
-                            maxDaySlotIdx = slot;
+                          if (slot !== undefined) {
+                            slotToElement[slot] = { type: 'multi', event: evt };
                           }
                         });
 
-                        const elements = [];
-                        for (let s = 0; s <= maxDaySlotIdx; s++) {
-                          const evt = dayNonShiftEvents.find(e => weekSlotsInfo.slots[e.id] === s);
-                          if (evt) {
-                            const isPrivate = evt.isPrivate && isPrivateMode;
+                        // 2. Place visible single-day events in the remaining slots
+                        let s = 0;
+                        let singleIdx = 0;
+                        while (singleIdx < visibleSingles.length) {
+                          if (slotToElement[s] === undefined) {
+                            slotToElement[s] = { type: 'single', event: visibleSingles[singleIdx] };
+                            singleIdx++;
+                          }
+                          s++;
+                        }
 
-                            // If it's a multi-day trip event, render spacer placeholder inside day cell
-                            if (evt.startDate && evt.endDate) {
+                        // Determine the maximum slot index to render (to cover all spacers up to the highest slot)
+                        const slotKeys = Object.keys(slotToElement).map(Number);
+                        const maxSlotIdx = slotKeys.length > 0 ? Math.max(...slotKeys) : -1;
+
+                        const elements = [];
+
+                        // 3. Render items
+                        for (let currentSlot = 0; currentSlot <= maxSlotIdx; currentSlot++) {
+                          const item = slotToElement[currentSlot];
+                          if (item) {
+                            if (item.type === 'multi') {
+                              // Render invisible spacer placeholder for multi-day event
                               elements.push(
                                 <div 
-                                  key={`placeholder-${idx}-${s}`}
+                                  key={`placeholder-${idx}-${currentSlot}`}
                                   style={{ 
                                     height: '20px', 
                                     minHeight: '20px', 
-                                    marginTop: '4px',
                                     visibility: 'hidden'
                                   }} 
                                 />
                               );
-                            }
+                            } else {
+                              const evt = item.event;
+                              const isPrivate = evt.isPrivate && isPrivateMode;
 
-                            // Render birthday event
-                            else if (evt.type === 'birthday') {
-                              elements.push(
-                                <div 
-                                  key={evt.id}
-                                  style={{
-                                    fontSize: '10px',
-                                    color: '#db2777',
-                                    backgroundColor: '#fdf2f8',
-                                    padding: '2px 4px',
-                                    borderRadius: '4px',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '2px',
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    fontWeight: '600',
-                                    height: '20px',
-                                    minHeight: '20px',
-                                    marginTop: '4px'
-                                  }}
-                                >
-                                  🎂 {isPrivate ? '생신' : `${evt.name} 생일`}
-                                  {evt.isLunar && <span style={{ fontSize: '8px', opacity: 0.8 }}>(음)</span>}
-                                </div>
-                              );
-                            }
+                              if (evt.type === 'birthday') {
+                                elements.push(
+                                  <div 
+                                    key={evt.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      onEditEvent && onEditEvent(evt);
+                                    }}
+                                    style={{
+                                      fontSize: '10px',
+                                      color: '#db2777',
+                                      backgroundColor: '#fdf2f8',
+                                      padding: '2px 4px',
+                                      borderRadius: '4px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '2px',
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      fontWeight: '600',
+                                      height: '20px',
+                                      minHeight: '20px',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    <Cake size={11} color="#db2777" style={{ flexShrink: 0 }} /> {isPrivate ? '생신' : `${evt.name} 생일`}
+                                    {evt.isLunar && <span style={{ fontSize: '8px', opacity: 0.8 }}>(음)</span>}
+                                  </div>
+                                );
+                              } else if (evt.type === 'appointment') {
+                                const displayTitle = isPrivate ? '약속' : evt.title;
+                                const displayMode = evt.displayMode || 'dot';
 
-                            // Render regular appointment
-                            else if (evt.type === 'appointment') {
-                              const displayTitle = isPrivate ? '약속' : evt.title;
-                              if (aptViewMode === 'dot') {
-                                elements.push(
-                                  <div 
-                                    key={evt.id} 
-                                    className="appointment-dot-item"
-                                    draggable
-                                    onDragStart={(e) => handleDragStart(e, evt.id)}
-                                    title={`${evt.title} (${evt.time})`}
-                                    style={{ height: '20px', minHeight: '20px', marginTop: '4px', display: 'flex', alignItems: 'center' }}
-                                  >
-                                    <span className={`dot-indicator ${isPrivate ? 'private' : ''}`}></span>
-                                    <span>{displayTitle}</span>
-                                  </div>
-                                );
-                              } else if (aptViewMode === 'both') {
-                                elements.push(
-                                  <div 
-                                    key={evt.id} 
-                                    className={`appointment-box-item ${isPrivate ? 'private' : ''}`}
-                                    draggable
-                                    onDragStart={(e) => handleDragStart(e, evt.id)}
-                                    title={`${evt.title} (${evt.time})`}
-                                    style={{ display: 'flex', alignItems: 'center', gap: '4px', height: '20px', minHeight: '20px', marginTop: '4px' }}
-                                  >
-                                    <span className={`dot-indicator ${isPrivate ? 'private' : ''}`} style={{ width: '5px', height: '5px', margin: 0, flexShrink: 0 }}></span>
-                                    {evt.time && <span style={{ opacity: 0.8, fontSize: '8px', marginRight: '3px' }}>{evt.time}</span>}
-                                    {displayTitle}
-                                  </div>
-                                );
-                              } else {
-                                elements.push(
-                                  <div 
-                                    key={evt.id} 
-                                    className={`appointment-box-item ${isPrivate ? 'private' : ''}`}
-                                    draggable
-                                    onDragStart={(e) => handleDragStart(e, evt.id)}
-                                    title={`${evt.title} (${evt.time})`}
-                                    style={{ height: '20px', minHeight: '20px', marginTop: '4px' }}
-                                  >
-                                    {evt.time && <span style={{ opacity: 0.8, fontSize: '8px', marginRight: '3px' }}>{evt.time}</span>}
-                                    {displayTitle}
-                                  </div>
-                                );
+                                if (displayMode === 'dot') {
+                                  const dotBg = isPrivate ? undefined : getDotColor(evt.color);
+                                  elements.push(
+                                    <div 
+                                      key={evt.id} 
+                                      className="appointment-dot-item"
+                                      draggable={!isReadOnlyPerspective}
+                                      onDragStart={(e) => !isReadOnlyPerspective && handleDragStart(e, evt.id)}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onEditEvent && onEditEvent(evt);
+                                      }}
+                                      title={`${evt.title} (${evt.time})`}
+                                      style={{ height: '20px', minHeight: '20px', display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+                                    >
+                                      <span 
+                                        className={`dot-indicator ${isPrivate ? 'private' : ''}`}
+                                        style={dotBg ? { backgroundColor: dotBg } : {}}
+                                      ></span>
+                                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px', width: '100%' }}>
+                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                          {getShareIcon(evt)}{displayTitle}
+                                        </span>
+                                        {renderSharedAvatars(evt)}
+                                      </span>
+                                    </div>
+                                  );
+                                } else {
+                                  const boxStyle = isPrivate ? {} : getBoxColorStyles(evt.color);
+                                  elements.push(
+                                    <div 
+                                      key={evt.id} 
+                                      className={`appointment-box-item ${isPrivate ? 'private' : ''}`}
+                                      draggable={!isReadOnlyPerspective}
+                                      onDragStart={(e) => !isReadOnlyPerspective && handleDragStart(e, evt.id)}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        onEditEvent && onEditEvent(evt);
+                                      }}
+                                      title={`${evt.title} (${evt.time})`}
+                                      style={{ 
+                                        height: '20px', 
+                                        minHeight: '20px', 
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '2px',
+                                        ...boxStyle
+                                      }}
+                                    >
+                                      {evt.time && <span style={{ opacity: 0.8, fontSize: '8px', marginRight: '3px', flexShrink: 0 }}>{evt.time}</span>}
+                                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px', width: '100%' }}>
+                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                          {getShareIcon(evt)}{displayTitle}
+                                        </span>
+                                        {renderSharedAvatars(evt)}
+                                      </span>
+                                    </div>
+                                  );
+                                }
                               }
                             }
                           } else {
-                            // Spacer placeholder to push subsequent events to their correct slot row
+                            // Empty slot (no active multi-day or single-day event here)
                             elements.push(
                               <div 
-                                key={`placeholder-${idx}-${s}`}
+                                key={`placeholder-${idx}-${currentSlot}`}
                                 style={{ 
                                   height: '20px', 
                                   minHeight: '20px', 
-                                  marginTop: '4px',
                                   visibility: 'hidden'
                                 }} 
                               />
@@ -515,32 +959,55 @@ export default function CalendarGrid({
                           }
                         }
 
+                        if (hiddenCount > 0) {
+                          elements.push(
+                            <div
+                              key={`more-events-${idx}`}
+                              style={{
+                                fontSize: '10px',
+                                color: 'var(--primary)',
+                                fontWeight: '700',
+                                paddingLeft: '4px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                height: '20px'
+                              }}
+                            >
+                              + {hiddenCount}개 더보기
+                            </div>
+                          );
+                        }
+
                         return elements;
                       })()}
                     </div>
 
                     {/* Inline Hover Action to Add Event */}
-                    <button 
-                      className="cell-add-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAddEventClick(dateStr);
-                      }}
-                      style={{
-                        position: 'absolute',
-                        bottom: '4px',
-                        right: '4px',
-                        opacity: 0,
-                        transition: 'opacity 0.2s',
-                        padding: '2px',
-                        borderRadius: '50%',
-                        backgroundColor: 'var(--primary-light)',
-                        color: 'var(--primary)'
-                      }}
-                      onMouseEnter={(e) => e.target.style.opacity = 1}
-                    >
-                      <Plus size={12} />
-                    </button>
+                    {!isReadOnlyPerspective && (
+                      <button 
+                        className="cell-add-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAddEventClick(dateStr);
+                        }}
+                        style={{
+                          position: 'absolute',
+                          bottom: '4px',
+                          right: '4px',
+                          padding: '2px',
+                          borderRadius: '50%',
+                          backgroundColor: 'var(--primary-light)',
+                          color: 'var(--primary)',
+                          border: 'none',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Plus size={12} />
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -566,21 +1033,27 @@ export default function CalendarGrid({
                   let text = '#0369a1';
                   if (evt.color === 'purple') { bg = '#f3e8ff'; text = '#6b21a8'; }
                   if (evt.color === 'emerald') { bg = '#dcfce7'; text = '#166534'; }
+                  if (evt.color === 'orange') { bg = '#ffedd5'; text = '#c2410c'; }
+                  if (evt.color === 'pink') { bg = '#fce7f3'; text = '#be185d'; }
                   
                   const isPrivate = evt.isPrivate && isPrivateMode;
                   
-                  const leftGap = isActualStart ? '4px' : '-2px';
-                  const rightGap = isActualEnd ? '4px' : '-2px';
+                  const leftGap = isActualStart ? '8px' : '2px';
+                  const rightGap = isActualEnd ? '8px' : '2px';
                   
                   return (
                     <div 
                       key={evt.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, evt.id)}
+                      draggable={!isReadOnlyPerspective}
+                      onDragStart={(e) => !isReadOnlyPerspective && handleDragStart(e, evt.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEditEvent && onEditEvent(evt);
+                      }}
                       style={{
                         position: 'absolute',
                         gridColumn: `${startColIdx + 1} / ${endColIdx + 2}`,
-                        top: `${38 + slotIdx * 28}px`,
+                        top: `${38 + slotIdx * 24}px`,
                         left: leftGap,
                         right: rightGap,
                         height: '20px',
@@ -598,11 +1071,19 @@ export default function CalendarGrid({
                         gap: '2px',
                         boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
                         zIndex: 5,
-                        pointerEvents: 'auto'
+                        pointerEvents: 'auto',
+                        cursor: 'pointer'
                       }}
                     >
-                      {isActualStart && <span style={{ marginRight: '2px' }}>✈️</span>}
-                      {(isActualStart || startColIdx === 0) && (isPrivate ? '일정 있음' : evt.title)}
+                      {isActualStart && <span style={{ marginRight: '2px', flexShrink: 0 }}>✈</span>}
+                      {(isActualStart || startColIdx === 0) && (
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px', width: '100%' }}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {isPrivate ? '일정 있음' : `${getShareIcon(evt)}${evt.title}`}
+                          </span>
+                          {!isPrivate && renderSharedAvatars(evt)}
+                        </span>
+                      )}
                     </div>
                   );
                 });

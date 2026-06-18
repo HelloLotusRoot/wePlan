@@ -29,6 +29,7 @@ public class UserSetting {
     private boolean excludeHolidays;
     
     // Display settings
+    private boolean showHolidayCalendar;
     private boolean showKoreanHolidays;
     private boolean showAlternativeHolidays;
     private boolean showLunarAnniversaries;

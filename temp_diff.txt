@@ -1,0 +1,858 @@
+﻿diff --git a/frontend/src/components/SettingsPanels.jsx b/frontend/src/components/SettingsPanels.jsx
+index ee5062f..c35540d 100644
+--- a/frontend/src/components/SettingsPanels.jsx
++++ b/frontend/src/components/SettingsPanels.jsx
+@@ -12,7 +12,10 @@ import {
+   Link2, 
+   Link2Off,
+   Moon,
+-  Sun
++  Sun,
++  Trash2,
++  Search,
++  X
+ } from 'lucide-react';
+ 
+ export default function SettingsPanels({
+@@ -27,20 +30,26 @@ export default function SettingsPanels({
+   isPrivateMode,
+   setIsPrivateMode,
+   onAddBirthday,
+-  onAddTripConnection,
+-  trips,
+-  onDisconnectTrip
++  hideHolidayCalendar = false,
++  onlyHolidayCalendar = false,
++  hideSharedSettings = false,
++  onlySharedSettings = false,
++  relationGroups = ['移쒓뎄', '?곗씤', '媛議?],
++  setRelationGroups,
++  calendarPerspective,
++  setCalendarPerspective
+ }) {
+   // Local state for forms
+   // 1. Shift times/colors (Dynamic Array)
+   const [localShifts, setLocalShifts] = useState(() => Array.isArray(shifts) ? [...shifts] : []);
++  const [openTimePicker, setOpenTimePicker] = useState(null); // { id: 'shift-xxx', type: 'start'|'end' } | null
+ 
+   useEffect(() => {
+     setLocalShifts(Array.isArray(shifts) ? [...shifts] : []);
+   }, [shifts]);
+ 
+   const handleAddLocalShift = () => {
+-    const colors = ['#ea580c', '#7c3aed', '#2563eb', '#ef4444', '#db2777', '#94a3b8', '#16a34a'];
++    const colors = ['#10b981', '#f97316', '#818cf8', '#3b82f6', '#f43f5e', '#ec4899', '#64748b'];
+     const usedColors = localShifts.map(s => s.color);
+     const unusedColor = colors.find(c => !usedColors.includes(c)) || colors[0];
+     
+@@ -49,7 +58,8 @@ export default function SettingsPanels({
+       label: '??洹쇰Т',
+       start: '09:00',
+       end: '18:00',
+-      color: unusedColor
++      color: unusedColor,
++      defaultOvertime: 0
+     };
+     setLocalShifts([...localShifts, newShift]);
+   };
+@@ -72,16 +82,18 @@ export default function SettingsPanels({
+   const [bdayAlarmOnDay, setBdayAlarmOnDay] = useState(true);
+   const [bdayAlarmWeekBefore, setBdayAlarmWeekBefore] = useState(true);
+ 
+-  // 4. Trip Form
+-  const [tripTitle, setTripTitle] = useState('?쒖＜???ы뻾');
+-  const [tripStart, setTripStart] = useState('2024-05-23');
+-  const [tripEnd, setTripEnd] = useState('2024-05-25');
+-  const [tripColor, setTripColor] = useState('blue');
++
+ 
+   // 5. Shared Target Form
+   const [shareName, setShareName] = useState('');
+-  const [shareRelation, setShareRelation] = useState('移쒓뎄');
++  const [shareRelation, setShareRelation] = useState(() => relationGroups[0] || '移쒓뎄');
+   const [sharePrivilege, setSharePrivilege] = useState('蹂닿린 媛??);
++  
++  useEffect(() => {
++    if (relationGroups && relationGroups.length > 0 && !relationGroups.includes(shareRelation)) {
++      setShareRelation(relationGroups[0]);
++    }
++  }, [relationGroups]);
+ 
+   const handleShiftSave = () => {
+     setShifts([...localShifts]);
+@@ -107,17 +119,40 @@ export default function SettingsPanels({
+     alert(`${bdayName}?섏쓽 ?앹씪???깃났?곸쑝濡??깅줉?섏뿀?듬땲??`);
+   };
+ 
+-  const handleAddTrip = (e) => {
+-    e.preventDefault();
+-    if (!tripTitle.trim() || !tripStart || !tripEnd) return;
+-    onAddTripConnection({
+-      title: tripTitle,
+-      startDate: tripStart,
+-      endDate: tripEnd,
+-      color: tripColor,
+-      place: '?쒖＜??
+-    });
+-    alert('?ы뻾 ?쇱젙???곌껐?섏뿀?듬땲??');
++
++
++  // Search & Filter state for sharing partners list
++  const [searchQuery, setSearchQuery] = useState('');
++  const [selectedGroupFilter, setSelectedGroupFilter] = useState('all');
++  
++  const filteredUsers = (sharedUsers || []).filter(user => {
++    const matchesSearch = user.name.toLowerCase().includes(searchQuery.toLowerCase());
++    const matchesGroup = selectedGroupFilter === 'all' || 
++      user.relation.replace(/[^\w\s媛-?ｃ꽦-?롢뀖-??/g, '').trim() === selectedGroupFilter;
++    return matchesSearch && matchesGroup;
++  });
++
++  const [newGroupName, setNewGroupName] = useState('');
++
++  const handleCreateGroup = () => {
++    const trimmed = newGroupName.trim();
++    if (!trimmed) return;
++    if (relationGroups.includes(trimmed)) {
++      alert('?대? 議댁옱?섎뒗 洹몃９ ?대쫫?낅땲??');
++      return;
++    }
++    setRelationGroups([...relationGroups, trimmed]);
++    setNewGroupName('');
++  };
++
++  const handleDeleteGroup = (group) => {
++    if (relationGroups.length <= 1) {
++      alert('理쒖냼 ??媛쒖쓽 洹몃９? ?좎??댁빞 ?⑸땲??');
++      return;
++    }
++    if (window.confirm(`"${group}" 洹몃９????젣?섏떆寃좎뒿?덇퉴?`)) {
++      setRelationGroups(relationGroups.filter(g => g !== group));
++    }
+   };
+ 
+   const handleAddShareTarget = () => {
+@@ -132,13 +167,14 @@ export default function SettingsPanels({
+     };
+     setSharedUsers([...sharedUsers, newTarget]);
+     setShareName('');
+-    alert(`${shareName}?섍낵 罹섎┛??怨듭쑀媛 ?깅줉?섏뿀?듬땲??`);
++    alert(`${shareName}?섍낵 ?쇱젙 怨듭쑀媛 ?깅줉?섏뿀?듬땲??`);
+   };
+ 
+   return (
+     <div className="settings-section-container">
+       {/* 1. ?ㅼ?以??ㅼ젙 */}
+-      <div className="settings-panel-card">
++      {!onlyHolidayCalendar && !onlySharedSettings && (
++      <div className="settings-panel-card" id="card-schedule">
+         <h3 className="panel-title">
+           <Clock size={16} color="var(--primary)" />
+           <span>洹쇰Т ?좏삎 ?ㅼ젙</span>
+@@ -147,7 +183,7 @@ export default function SettingsPanels({
+         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '380px', overflowY: 'auto', paddingRight: '4px' }}>
+           {/* Shift Inputs loop */}
+           {localShifts.map((shift, index) => {
+-            const colors = ['#16a34a', '#ea580c', '#7c3aed', '#2563eb', '#ef4444', '#db2777', '#94a3b8'];
++            const colors = ['#10b981', '#f97316', '#818cf8', '#3b82f6', '#f43f5e', '#ec4899', '#64748b'];
+             return (
+               <div key={shift.id} style={{ borderTop: index > 0 ? '1px solid #f1f5f9' : 'none', paddingTop: index > 0 ? '8px' : '0' }}>
+                 <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '4px' }}>
+@@ -158,14 +194,14 @@ export default function SettingsPanels({
+                     style={{ fontWeight: 'bold', fontSize: '11px', maxWidth: '75px', padding: '2px 6px', height: '22px', backgroundColor: '#f1f5f9' }}
+                     value={shift.label}
+                     onChange={(e) => {
+-                      const updated = localShifts.map(s => s.id === shift.id ? { ...s, label: e.target.value } : s);
+-                      setLocalShifts(updated);
++                       const updated = localShifts.map(s => s.id === shift.id ? { ...s, label: e.target.value } : s);
++                       setLocalShifts(updated);
+                     }}
+                     placeholder="洹쇰Т紐?
+                   />
+ 
+                   {/* Color Picker */}
+-                  <div style={{ display: 'flex', gap: '3px', marginLeft: 'auto' }}>
++                  <div style={{ display: 'flex', gap: '6px', marginLeft: 'auto', alignItems: 'center', paddingRight: '4px' }}>
+                     {colors.map(c => (
+                       <button
+                         key={c}
+@@ -175,13 +211,17 @@ export default function SettingsPanels({
+                           setLocalShifts(updated);
+                         }}
+                         style={{
+-                          width: '11px',
+-                          height: '11px',
++                          width: '18px',
++                          height: '18px',
+                           borderRadius: '50%',
+-                          backgroundColor: c,
+-                          border: shift.color === c ? '2.5px solid #1e293b' : '1px solid #cbd5e1',
++                          backgroundColor: c + '25',
++                          border: shift.color === c ? `2.5px solid ${c}` : `1px solid ${c}40`,
+                           padding: 0,
+-                          cursor: 'pointer'
++                          cursor: 'pointer',
++                          transform: shift.color === c ? 'scale(1.2)' : 'scale(1)',
++                          transition: 'all 0.15s ease-in-out',
++                          outline: 'none',
++                          boxShadow: shift.color === c ? '0 2px 4px rgba(0,0,0,0.1)' : 'none'
+                         }}
+                         title={c}
+                       />
+@@ -201,29 +241,54 @@ export default function SettingsPanels({
+                   )}
+                 </div>
+ 
+-                {/* Time range inputs */}
+-                <div className="settings-input-group">
+-                  <input 
+-                    type="text" 
+-                    className="input-text" 
+-                    style={{ padding: '4px 8px', fontSize: '11px', height: '24px' }}
+-                    value={shift.start}
+-                    onChange={(e) => {
+-                      const updated = localShifts.map(s => s.id === shift.id ? { ...s, start: e.target.value } : s);
+-                      setLocalShifts(updated);
+-                    }}
+-                  />
++                {/* Time range & defaultOvertime inputs */}
++                <div className="settings-input-group" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
++                  {/* Start Time Picker */}
++                  <div style={{ position: 'relative', flex: 1 }}>
++                    <input 
++                      type="text" 
++                      readOnly
++                      className="input-text" 
++                      style={{ padding: '4px 8px', fontSize: '11px', height: '24px', width: '100%', textAlign: 'center', cursor: 'pointer' }}
++                      value={formatTimeLabel(shift.start)}
++                      onClick={() => setOpenTimePicker({ id: shift.id, type: 'start' })}
++                    />
++                    {openTimePicker?.id === shift.id && openTimePicker?.type === 'start' && (
++                      <TimePickerDropdown 
++                        value={shift.start} 
++                        onChange={(val) => {
++                          const updated = localShifts.map(s => s.id === shift.id ? { ...s, start: val } : s);
++                          setLocalShifts(updated);
++                        }}
++                        onClose={() => setOpenTimePicker(null)}
++                      />
++                    )}
++                  </div>
++                  
+                   <span style={{ fontSize: '11px' }}>~</span>
+-                  <input 
+-                    type="text" 
+-                    className="input-text" 
+-                    style={{ padding: '4px 8px', fontSize: '11px', height: '24px' }}
+-                    value={shift.end}
+-                    onChange={(e) => {
+-                      const updated = localShifts.map(s => s.id === shift.id ? { ...s, end: e.target.value } : s);
+-                      setLocalShifts(updated);
+-                    }}
+-                  />
++                  
++                  {/* End Time Picker */}
++                  <div style={{ position: 'relative', flex: 1 }}>
++                    <input 
++                      type="text" 
++                      readOnly
++                      className="input-text" 
++                      style={{ padding: '4px 8px', fontSize: '11px', height: '24px', width: '100%', textAlign: 'center', cursor: 'pointer' }}
++                      value={formatTimeLabel(shift.end)}
++                      onClick={() => setOpenTimePicker({ id: shift.id, type: 'end' })}
++                    />
++                    {openTimePicker?.id === shift.id && openTimePicker?.type === 'end' && (
++                      <TimePickerDropdown 
++                        value={shift.end} 
++                        onChange={(val) => {
++                          const updated = localShifts.map(s => s.id === shift.id ? { ...s, end: val } : s);
++                          setLocalShifts(updated);
++                        }}
++                        onClose={() => setOpenTimePicker(null)}
++                      />
++                    )}
++                  </div>
++
+                 </div>
+               </div>
+             );
+@@ -243,10 +308,12 @@ export default function SettingsPanels({
+           </button>
+         </div>
+       </div>
++      )}
+ 
+ 
+       {/* 2. ?뚮┝ ?ㅼ젙 */}
+-      <div className="settings-panel-card">
++      {!onlyHolidayCalendar && !onlySharedSettings && (
++      <div className="settings-panel-card" id="card-alarm">
+         <h3 className="panel-title">
+           <Bell size={16} color="var(--primary)" />
+           <span>?뚮┝ ?ㅼ젙</span>
+@@ -307,23 +374,36 @@ export default function SettingsPanels({
+           </button>
+         </div>
+       </div>
++      )}
+ 
+       {/* 3. 怨듯쑕??罹섎┛??*/}
+-      <div className="settings-panel-card">
+-        <h3 className="panel-title">
+-          <Calendar size={16} color="#ef4444" />
+-          <span>怨듯쑕??罹섎┛??/span>
++      {!hideHolidayCalendar && !onlySharedSettings && (
++      <div className="settings-panel-card" id="card-holiday">
++        <h3 className="panel-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
++          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
++            <Calendar size={16} color="#ef4444" />
++            <span>怨듯쑕??罹섎┛??/span>
++          </div>
++          <label className="switch">
++            <input 
++              type="checkbox" 
++              checked={settings.showHolidayCalendar !== false}
++              onChange={(e) => setSettings({ ...settings, showHolidayCalendar: e.target.checked })}
++            />
++            <span className="slider"></span>
++          </label>
+         </h3>
+         
+-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
++        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', opacity: settings.showHolidayCalendar !== false ? 1 : 0.5 }}>
+           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+             <input 
+               type="checkbox" 
+               id="chk-korean-h"
+               checked={settings.showKoreanHolidays}
++              disabled={settings.showHolidayCalendar === false}
+               onChange={(e) => setSettings({ ...settings, showKoreanHolidays: e.target.checked })}
+             />
+-            <label htmlFor="chk-korean-h" className="settings-label" style={{ cursor: 'pointer' }}>?쒓뎅 怨듯쑕???쒖떆</label>
++            <label htmlFor="chk-korean-h" className="settings-label" style={{ cursor: settings.showHolidayCalendar === false ? 'not-allowed' : 'pointer' }}>?쒓뎅 怨듯쑕???쒖떆</label>
+           </div>
+ 
+           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+@@ -331,9 +411,10 @@ export default function SettingsPanels({
+               type="checkbox" 
+               id="chk-alt-h"
+               checked={settings.showAlternativeHolidays}
++              disabled={settings.showHolidayCalendar === false}
+               onChange={(e) => setSettings({ ...settings, showAlternativeHolidays: e.target.checked })}
+             />
+-            <label htmlFor="chk-alt-h" className="settings-label" style={{ cursor: 'pointer' }}>?泥?怨듯쑕???쒖떆</label>
++            <label htmlFor="chk-alt-h" className="settings-label" style={{ cursor: settings.showHolidayCalendar === false ? 'not-allowed' : 'pointer' }}>?泥?怨듯쑕???쒖떆</label>
+           </div>
+ 
+           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+@@ -341,20 +422,13 @@ export default function SettingsPanels({
+               type="checkbox" 
+               id="chk-lunar-a"
+               checked={settings.showLunarAnniversaries}
++              disabled={settings.showHolidayCalendar === false}
+               onChange={(e) => setSettings({ ...settings, showLunarAnniversaries: e.target.checked })}
+             />
+-            <label htmlFor="chk-lunar-a" className="settings-label" style={{ cursor: 'pointer' }}>?뚮젰 湲곕뀗???쒖떆</label>
++            <label htmlFor="chk-lunar-a" className="settings-label" style={{ cursor: settings.showHolidayCalendar === false ? 'not-allowed' : 'pointer' }}>?뚮젰 湲곕뀗???쒖떆</label>
+           </div>
+ 
+-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+-            <input 
+-              type="checkbox" 
+-              id="chk-my-a"
+-              checked={settings.showMyAnniversaries}
+-              onChange={(e) => setSettings({ ...settings, showMyAnniversaries: e.target.checked })}
+-            />
+-            <label htmlFor="chk-my-a" className="settings-label" style={{ cursor: 'pointer' }}>??湲곕뀗???쒖떆</label>
+-          </div>
++
+           
+           <button 
+             className="btn-secondary" 
+@@ -365,158 +439,235 @@ export default function SettingsPanels({
+           </button>
+         </div>
+       </div>
++      )}
+ 
+-      {/* 4. 怨듭쑀 罹섎┛??*/}
+-      <div className="settings-panel-card">
++      {/* 4. ?쇱젙 怨듭쑀 */}
++      {!onlyHolidayCalendar && !hideSharedSettings && (
++      <div className="settings-panel-card" id="card-shared">
+         <h3 className="panel-title">
+           <Users size={16} color="#10b981" />
+-          <span>怨듭쑀 罹섎┛??/span>
++          <span>?쇱젙 怨듭쑀 ?ㅼ젙</span>
+         </h3>
+         
+-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+-          <div className="toggle-switch-row" style={{ paddingBottom: '6px', borderBottom: '1px solid var(--border-color)' }}>
+-            <span className="settings-label" style={{ color: 'var(--primary)', fontWeight: '700' }}>?섎쭔 蹂닿린 紐⑤뱶</span>
+-            <label className="switch">
+-              <input 
+-                type="checkbox" 
+-                checked={isPrivateMode}
+-                onChange={(e) => setIsPrivateMode(e.target.checked)}
+-              />
+-              <span className="slider"></span>
+-            </label>
+-          </div>
+-
+-          {/* List of current share partners */}
+-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '120px', overflowY: 'auto' }}>
+-            {sharedUsers.map(user => (
+-              <div 
+-                key={user.id} 
+-                style={{ 
+-                  display: 'flex', 
+-                  justifyContent: 'space-between', 
+-                  alignItems: 'center',
+-                  fontSize: '11px',
+-                  backgroundColor: '#f8fafc',
+-                  padding: '4px 8px',
+-                  borderRadius: '4px'
+-                }}
+-              >
+-                <span>{user.relation} ({user.name})</span>
+-                <span style={{ 
+-                  color: user.privilege.includes('?몄쭛') ? '#dc2626' : '#2563eb',
+-                  fontWeight: '600'
+-                }}>
+-                  {user.privilege}
+-                </span>
+-              </div>
+-            ))}
+-          </div>
+-
+-          {/* Add Partner Form */}
+-          <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+-            <div style={{ display: 'flex', gap: '4px' }}>
+-              <input 
+-                type="text" 
+-                placeholder="移쒓뎄 ?대쫫"
+-                className="input-text"
+-                style={{ padding: '4px 8px', fontSize: '11px' }}
+-                value={shareName}
+-                onChange={(e) => setShareName(e.target.value)}
+-              />
+-              <select 
+-                style={{ padding: '4px', fontSize: '11px' }}
+-                value={shareRelation}
+-                onChange={(e) => setShareRelation(e.target.value)}
+-              >
+-                <option value="?곗씤">?곗씤</option>
+-                <option value="媛議?>媛議?/option>
+-                <option value="移쒓뎄">移쒓뎄</option>
+-              </select>
++        <div className="sharing-card-layout">
++          {/* Left Column: Settings, Add Target, Group Management */}
++          <div className="sharing-card-left">
++            <div className="sharing-toggle-row">
++              <span className="settings-label" style={{ color: 'var(--primary)', fontWeight: '700', fontSize: '12px' }}>?섎쭔 蹂닿린 紐⑤뱶</span>
++              <label className="switch">
++                <input 
++                  type="checkbox" 
++                  checked={isPrivateMode}
++                  onChange={(e) => setIsPrivateMode(e.target.checked)}
++                />
++                <span className="slider"></span>
++              </label>
+             </div>
+-            <button 
+-              onClick={handleAddShareTarget}
+-              className="btn-secondary" 
+-              style={{ padding: '4px', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+-            >
+-              <UserPlus size={12} />
+-              怨듭쑀 ???異붽?
+-            </button>
+-          </div>
+-        </div>
+-      </div>
+ 
+-      {/* 5. ?ы뻾 ?쇱젙 ?곌껐 */}
+-      <div className="settings-panel-card">
+-        <h3 className="panel-title">
+-          <Plane size={16} color="var(--apt-text)" />
+-          <span>?ы뻾 ?쇱젙 ?곌껐</span>
+-        </h3>
+-        
+-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+-          {trips.length > 0 ? (
+-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+-              <div className="trip-connection-timeline">
+-                {trips.map((trip, idx) => (
+-                  <div key={trip.id} className="timeline-node">
+-                    <span style={{ fontSize: '12px', fontWeight: '600' }}>
+-                      {trip.title} ({trip.startDate === trip.endDate ? '?뱀씪' : `${idx + 1}?쇱감`})
+-                    </span>
+-                    <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+-                      {trip.startDate} ~ {trip.endDate}
+-                    </span>
+-                  </div>
+-                ))}
++            {/* Add Partner Form */}
++            <div className="sharing-sub-section">
++              <span className="sharing-sub-title">
++                <UserPlus size={13} color="var(--primary)" />
++                怨듭쑀 ???異붽?
++              </span>
++              <div className="sharing-add-grid">
++                <input 
++                  type="text" 
++                  placeholder="移쒓뎄 ?대쫫"
++                  className="sharing-add-input"
++                  value={shareName}
++                  onChange={(e) => setShareName(e.target.value)}
++                />
++                <select 
++                  className="sharing-add-select"
++                  value={shareRelation}
++                  onChange={(e) => setShareRelation(e.target.value)}
++                >
++                  {relationGroups.map(group => (
++                    <option key={group} value={group}>{group}</option>
++                  ))}
++                </select>
++                <select 
++                  className="sharing-add-select"
++                  value={sharePrivilege}
++                  onChange={(e) => setSharePrivilege(e.target.value)}
++                >
++                  <option value="蹂닿린 媛??>蹂닿린 媛??/option>
++                  <option value="?몄쭛 媛??>?몄쭛 媛??/option>
++                </select>
+               </div>
+               <button 
+-                onClick={onDisconnectTrip}
+-                className="btn-secondary"
+-                style={{ color: '#ef4444', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
++                onClick={handleAddShareTarget}
++                className="sharing-add-btn" 
+               >
+-                <Link2Off size={12} />
+-                ?쇱젙 ?곌껐 ?댁젣
++                <UserPlus size={13} />
++                怨듭쑀 ?곷? ?깅줉
+               </button>
+             </div>
+-          ) : (
+-            <form onSubmit={handleAddTrip} style={{ display: 'flex', flexDirection: 'column', gap: '8px', height: '100%' }}>
+-              <input 
+-                type="text" 
+-                placeholder="?ы뻾 ?쒕ぉ (?? ?쒖＜???ы뻾)"
+-                className="input-text"
+-                style={{ padding: '6px', fontSize: '11px' }}
+-                value={tripTitle}
+-                onChange={(e) => setTripTitle(e.target.value)}
+-              />
+-              <div style={{ display: 'flex', gap: '4px' }}>
++
++            {/* Group Management Section */}
++            <div className="sharing-sub-section">
++              <span className="sharing-sub-title">
++                <Users size={13} color="var(--primary)" />
++                怨듭쑀 洹몃９ 愿由?+              </span>
++              <div className="sharing-group-badge-list">
++                {relationGroups.map(group => (
++                  <span 
++                    key={group}
++                    className="sharing-group-badge"
++                  >
++                    {group}
++                    {relationGroups.length > 1 && (
++                      <button
++                        type="button"
++                        onClick={() => handleDeleteGroup(group)}
++                        className="sharing-group-delete-btn"
++                        title="洹몃９ ??젣"
++                      >
++                        <X size={11} />
++                      </button>
++                    )}
++                  </span>
++                ))}
++              </div>
++              
++              <div className="sharing-group-add-row">
+                 <input 
+-                  type="date" 
+-                  className="input-text" 
+-                  style={{ padding: '4px', fontSize: '10px' }}
+-                  value={tripStart}
+-                  onChange={(e) => setTripStart(e.target.value)}
++                  type="text" 
++                  placeholder="??洹몃９ ?대쫫"
++                  className="sharing-group-add-input"
++                  value={newGroupName}
++                  onChange={(e) => setNewGroupName(e.target.value)}
+                 />
++                <button 
++                  type="button"
++                  onClick={handleCreateGroup}
++                  className="sharing-group-add-btn" 
++                >
++                  + 異붽?
++                </button>
++              </div>
++            </div>
++          </div>
++
++          {/* Right Column: Friends List, Search & Filter, Perspective */}
++          <div className="sharing-card-right">
++            <span className="sharing-group-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
++              <Users size={13} color="var(--primary)" />
++              ?쇱젙 怨듭쑀 移쒓뎄 紐⑸줉 ({filteredUsers.length}紐?
++            </span>
++
++            {/* Search & Filter Controls */}
++            <div className="sharing-search-container">
++              <div className="sharing-search-input-wrapper">
++                <Search size={14} className="sharing-search-icon" />
+                 <input 
+-                  type="date" 
+-                  className="input-text" 
+-                  style={{ padding: '4px', fontSize: '10px' }}
+-                  value={tripEnd}
+-                  onChange={(e) => setTripEnd(e.target.value)}
++                  type="text"
++                  placeholder="怨듭쑀???대쫫 寃??
++                  className="sharing-search-input"
++                  value={searchQuery}
++                  onChange={(e) => setSearchQuery(e.target.value)}
+                 />
+               </div>
+-              <button 
+-                type="submit" 
+-                className="btn-secondary" 
+-                style={{ padding: '6px', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', marginTop: 'auto' }}
++              <select
++                className="sharing-filter-select"
++                value={selectedGroupFilter}
++                onChange={(e) => setSelectedGroupFilter(e.target.value)}
+               >
+-                <Link2 size={12} />
+-                ?쇱젙 ?곌껐?섍린
+-              </button>
+-            </form>
+-          )}
++                <option value="all">紐⑤뱺 洹몃９</option>
++                {relationGroups.map(group => (
++                  <option key={group} value={group}>{group}</option>
++                ))}
++              </select>
++            </div>
++
++            {/* List of current share partners */}
++            <div className="sharing-partners-list">
++              {filteredUsers.length === 0 ? (
++                <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0' }}>
++                  寃?됰맂 怨듭쑀 移쒓뎄媛 ?놁뒿?덈떎.
++                </div>
++              ) : (
++                filteredUsers.map(user => {
++                  const isActivePerspective = calendarPerspective === user.id;
++                  return (
++                    <div 
++                      key={user.id} 
++                      className={`sharing-partner-row ${isActivePerspective ? 'active-perspective' : ''}`}
++                      onClick={() => setCalendarPerspective(isActivePerspective ? 'me' : user.id)}
++                      title={isActivePerspective ? "???쒖젏?쇰줈 蹂듦?" : `${user.name} ?쒖젏???붾㈃ 蹂닿린`}
++                    >
++                      <div className="sharing-partner-info">
++                        {/* Avatar */}
++                        <div className="sharing-partner-avatar">
++                          {user.avatar ? (
++                            <img
++                              src={user.avatar}
++                              alt={user.name}
++                              style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
++                            />
++                          ) : (
++                            user.name.substring(0, 1)
++                          )}
++                        </div>
++                        <span className="sharing-partner-name-group">
++                          {user.name} 
++                          <span className="sharing-partner-group-badge">
++                            {user.relation.replace(/[^\w\s媛-?ｃ꽦-?롢뀖-??/g, '').trim()}
++                          </span>
++                        </span>
++                        {isActivePerspective && (
++                          <span className="perspective-active-badge">
++                            ?쒖젏 ?쒖꽦
++                          </span>
++                        )}
++                      </div>
++                      
++                      {/* Privilege Select */}
++                      <select
++                        value={user.privilege}
++                        onChange={(e) => {
++                          const updated = sharedUsers.map(u => u.id === user.id ? { ...u, privilege: e.target.value } : u);
++                          setSharedUsers(updated);
++                        }}
++                        onClick={(e) => e.stopPropagation()}
++                        className={`sharing-partner-privilege-select ${user.privilege.includes('?몄쭛') ? 'edit-allow' : 'read-only'}`}
++                      >
++                        <option value="蹂닿린 媛??>蹂닿린 媛??/option>
++                        <option value="?몄쭛 媛??>?몄쭛 媛??/option>
++                      </select>
++
++                      {/* Delete Button */}
++                      <button
++                        type="button"
++                        onClick={(e) => {
++                          e.stopPropagation();
++                          if (window.confirm(`${user.name}?섍낵???쇱젙 怨듭쑀瑜?以묐떒?섏떆寃좎뒿?덇퉴?`)) {
++                            setSharedUsers(sharedUsers.filter(u => u.id !== user.id));
++                            if (isActivePerspective) setCalendarPerspective('me');
++                          }
++                        }}
++                        className="sharing-partner-delete-btn"
++                        title="怨듭쑀 ?댁젣"
++                      >
++                        <X size={13} />
++                      </button>
++                    </div>
++                  );
++                })
++              )}
++            </div>
++          </div>
+         </div>
+       </div>
++      )}
++
++
+ 
+       {/* 6. ?앹씪 ?ㅼ젙 */}
+-      <div className="settings-panel-card">
++      {!onlyHolidayCalendar && !onlySharedSettings && (
++      <div className="settings-panel-card" id="card-birthday">
+         <h3 className="panel-title">
+           <Cake size={16} color="#db2777" />
+           <span>?앹씪 ?ㅼ젙</span>
+@@ -598,6 +749,121 @@ export default function SettingsPanels({
+           </button>
+         </form>
+       </div>
++      )}
+     </div>
+   );
+ }
++
++// Time picker dropdown & format helpers
++const formatTimeLabel = (timeStr) => {
++  if (!timeStr || !timeStr.includes(':')) return timeStr || '';
++  const [hStr, mStr] = timeStr.split(':');
++  const h = parseInt(hStr, 10);
++  const m = parseInt(mStr, 10);
++  const ampm = h >= 12 ? '?ㅽ썑' : '?ㅼ쟾';
++  const displayH = h % 12 === 0 ? 12 : h % 12;
++  const formattedH = String(displayH).padStart(2, '0');
++  const formattedM = String(m).padStart(2, '0');
++  return `${ampm} ${formattedH}:${formattedM}`;
++};
++
++function TimePickerDropdown({ value, onChange, onClose }) {
++  const [hStr, mStr] = (value || "09:00").split(':');
++  const initH = parseInt(hStr, 10);
++  const initM = parseInt(mStr, 10);
++  
++  const currentAmpm = initH >= 12 ? '?ㅽ썑' : '?ㅼ쟾';
++  const currentHour = initH % 12 === 0 ? 12 : initH % 12;
++  const currentMinute = initM;
++
++  const hours = Array.from({ length: 12 }, (_, i) => i + 1); // 1 ~ 12
++  const minutes = Array.from({ length: 12 }, (_, i) => i * 5); // 00, 05, 10 ... 55 (5遺??⑥쐞)
++
++  const handleSelect = (newAmpm, newHour, newMin) => {
++    let h = newHour;
++    if (newAmpm === '?ㅽ썑' && h < 12) h += 12;
++    if (newAmpm === '?ㅼ쟾' && h === 12) h = 0;
++    const formattedH = String(h).padStart(2, '0');
++    const formattedM = String(newMin).padStart(2, '0');
++    onChange(`${formattedH}:${formattedM}`);
++  };
++
++  return (
++    <>
++      <div 
++        className="dropdown-backdrop" 
++        onClick={onClose} 
++        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1009, background: 'transparent' }}
++      />
++      <div 
++        className="custom-dropdown-menu" 
++        style={{ 
++          display: 'flex', 
++          gap: '0', 
++          padding: '4px', 
++          width: '180px', 
++          zIndex: 1010,
++          maxHeight: '180px',
++          overflow: 'hidden',
++          position: 'absolute',
++          top: '100%',
++          left: 0,
++          marginTop: '4px'
++        }}
++      >
++        {/* ?ㅼ쟾/?ㅽ썑 */}
++        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border-color)' }}>
++          {['?ㅼ쟾', '?ㅽ썑'].map(ampm => {
++            const active = ampm === currentAmpm;
++            return (
++              <div 
++                key={ampm} 
++                className={`dropdown-item ${active ? 'active' : ''}`}
++                onClick={() => handleSelect(ampm, currentHour, currentMinute)}
++                style={{ textAlign: 'center', padding: '6px 0', fontSize: '11px', cursor: 'pointer' }}
++              >
++                {ampm}
++              </div>
++            );
++          })}
++        </div>
++
++        {/* ??*/}
++        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', borderRight: '1px solid var(--border-color)' }}>
++          {hours.map(h => {
++            const active = h === currentHour;
++            const formattedH = String(h).padStart(2, '0');
++            return (
++              <div 
++                key={h} 
++                className={`dropdown-item ${active ? 'active' : ''}`}
++                onClick={() => handleSelect(currentAmpm, h, currentMinute)}
++                style={{ textAlign: 'center', padding: '6px 0', fontSize: '11px', cursor: 'pointer' }}
++              >
++                {formattedH}
++              </div>
++            );
++          })}
++        </div>
++
++        {/* 遺?*/}
++        <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
++          {minutes.map(m => {
++            const active = m === currentMinute;
++            const formattedM = String(m).padStart(2, '0');
++            return (
++              <div 
++                key={m} 
++                className={`dropdown-item ${active ? 'active' : ''}`}
++                onClick={() => handleSelect(currentAmpm, currentHour, m)}
++                style={{ textAlign: 'center', padding: '6px 0', fontSize: '11px', cursor: 'pointer' }}
++              >
++                {formattedM}
++              </div>
++            );
++          })}
++        </div>
++      </div>
++    </>
++  );
++}

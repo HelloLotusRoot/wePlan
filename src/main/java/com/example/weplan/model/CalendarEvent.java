@@ -4,10 +4,15 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.FetchType;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import java.util.List;
 
 @Entity
 @Table(name = "calendar_events")
@@ -44,4 +49,12 @@ public class CalendarEvent {
     private Boolean isLunar;
     private Boolean alarmOnDay;
     private Boolean alarmWeekBefore;
+    
+    // Sharing fields
+    private String shareScope; // "public", "private", "custom"
+    
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "calendar_event_sharing_friends", joinColumns = @JoinColumn(name = "event_id"))
+    @Column(name = "friend_id")
+    private List<String> sharedWith;
 }

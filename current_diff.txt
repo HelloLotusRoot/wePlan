@@ -1,0 +1,2185 @@
+diff --git a/frontend/src/App.jsx b/frontend/src/App.jsx
+index 2f1a4eb..160eabb 100644
+--- a/frontend/src/App.jsx
++++ b/frontend/src/App.jsx
+@@ -16,7 +16,8 @@ import {
+   HelpCircle,
+   Clock,
+   MapPin,
+-  Check
++  Check,
++  Settings
+ } from 'lucide-react';
+ import { lunarToSolar } from './utils/lunarCalendar';
+ import { fetchHolidays } from './utils/holidays';
+@@ -69,12 +70,43 @@ const INITIAL_EVENTS = [
+ ];
+ 
+ const INITIAL_SHARED_USERS = [
+-  { id: 'user-1', name: '민지', relation: '연인 ❤️', privilege: '보기 가능', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=80&auto=format&fit=crop', isSharing: true },
+-  { id: 'user-2', name: '가족', relation: '가족 🏠', privilege: '편집 가능', avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?q=80&w=80&auto=format&fit=crop', isSharing: true },
+-  { id: 'user-3', name: '현지', relation: '친구 👭', privilege: '보기 가능', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=80&auto=format&fit=crop', isSharing: true }
++  { id: 'user-1', name: '민지', relation: '연인', privilege: '보기 가능', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=80&auto=format&fit=crop', isSharing: true },
++  { id: 'user-2', name: '가족', relation: '가족', privilege: '편집 가능', avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?q=80&w=80&auto=format&fit=crop', isSharing: true },
++  { id: 'user-3', name: '현지', relation: '친구', privilege: '보기 가능', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=80&auto=format&fit=crop', isSharing: true }
+ ];
+ 
++const shiftMockDatesToCurrentMonth = (eventList) => {
++  if (!Array.isArray(eventList)) return [];
++  const today = new Date();
++  const y = today.getFullYear();
++  const m = String(today.getMonth() + 1).padStart(2, '0');
++  const prefix = `${y}-${m}-`;
++
++  return eventList.map(evt => {
++    const copy = { ...evt };
++    if (copy.date && copy.date.startsWith('2024-05-')) {
++      copy.date = prefix + copy.date.slice(8);
++    }
++    if (copy.startDate && copy.startDate.startsWith('2024-05-')) {
++      copy.startDate = prefix + copy.startDate.slice(8);
++    }
++    if (copy.endDate && copy.endDate.startsWith('2024-05-')) {
++      copy.endDate = prefix + copy.endDate.slice(8);
++    }
++    return copy;
++  });
++};
++
+ export default function App() {
++  const [relationGroups, setRelationGroups] = useState(() => {
++    const saved = localStorage.getItem('weplan_relation_groups');
++    return saved ? JSON.parse(saved) : ['친구', '연인', '가족'];
++  });
++
++  useEffect(() => {
++    localStorage.setItem('weplan_relation_groups', JSON.stringify(relationGroups));
++  }, [relationGroups]);
++
+   // Load state from localStorage or use defaults
+   const [userName, setUserName] = useState(() => {
+     return localStorage.getItem('weplan_username') || '김소현';
+@@ -105,20 +137,25 @@ export default function App() {
+     const saved = localStorage.getItem('weplan_events');
+     if (saved && saved !== 'undefined') {
+       try {
+-        return JSON.parse(saved);
++        return shiftMockDatesToCurrentMonth(JSON.parse(saved));
+       } catch (e) {}
+     }
+-    return INITIAL_EVENTS;
++    return shiftMockDatesToCurrentMonth(INITIAL_EVENTS);
+   });
+ 
+   const [sharedUsers, setSharedUsers] = useState(() => {
+     const saved = localStorage.getItem('weplan_shared_users');
++    let users = INITIAL_SHARED_USERS;
+     if (saved && saved !== 'undefined') {
+       try {
+-        return JSON.parse(saved);
++        users = JSON.parse(saved);
+       } catch (e) {}
+     }
+-    return INITIAL_SHARED_USERS;
++    // Clean emojis from legacy database/localStorage relations
++    return users.map(u => ({
++      ...u,
++      relation: u.relation ? u.relation.replace(/[^\w\s가-힣ㄱ-ㅎㅏ-ㅣ]/g, '').trim() : ''
++    }));
+   });
+ 
+   const [isPrivateMode, setIsPrivateMode] = useState(() => {
+@@ -155,23 +192,39 @@ export default function App() {
+       } catch (e) {}
+     }
+     return {
++      showHolidayCalendar: true,
+       showKoreanHolidays: true,
+       showAlternativeHolidays: true,
+       showLunarAnniversaries: true,
+-      showMyAnniversaries: false
++      showMyAnniversaries: true
+     };
+   });
+ 
+   // UI Control states
+   const [currentTab, setCurrentTab] = useState('calendar');
+-  const [currentDate, setCurrentDate] = useState(new Date(2024, 4, 15)); // Default to May 2024
++  const [rightSidebarWidth, setRightSidebarWidth] = useState(() => {
++    const saved = localStorage.getItem('weplan_right_sidebar_width');
++    return saved ? parseInt(saved, 10) : 340;
++  });
++  const [showRightSidebar, setShowRightSidebar] = useState(() => {
++    const saved = localStorage.getItem('weplan_show_right_sidebar');
++    return saved !== 'false';
++  });
++  const [isDragging, setIsDragging] = useState(false);
++  const [currentDate, setCurrentDate] = useState(() => new Date()); // Default to today's date
+   const [viewMode, setViewMode] = useState('month'); // month, week, day, list
+   
+   // Custom display settings: Work representation & Appointment representation
+   const [workViewMode, setWorkViewMode] = useState('badge'); // 'full' (하루전체네모칸) or 'badge' (네모박스/배지)
+   const [aptViewMode, setAptViewMode] = useState('dot'); // 'dot' (원/점) or 'box' (네모박스)
+ 
+-  const [selectedDay, setSelectedDay] = useState('2024-05-15');
++  const [selectedDay, setSelectedDay] = useState(() => {
++    const today = new Date();
++    const y = today.getFullYear();
++    const m = String(today.getMonth() + 1).padStart(2, '0');
++    const d = String(today.getDate()).padStart(2, '0');
++    return `${y}-${m}-${d}`;
++  });
+   const [showAddModal, setShowAddModal] = useState(false);
+   const [editTarget, setEditTarget] = useState(null);
+ 
+@@ -186,6 +239,18 @@ export default function App() {
+   const [formTripStart, setFormTripStart] = useState('');
+   const [formTripEnd, setFormTripEnd] = useState('');
+   const [formTripColor, setFormTripColor] = useState('blue');
++  const [formAptDisplayMode, setFormAptDisplayMode] = useState('dot'); // 'dot' or 'box'
++  const [calendarPerspective, setCalendarPerspective] = useState('me'); // 'me' | sharedUser.id
++  const [formShareScope, setFormShareScope] = useState('public'); // 'public' | 'private' | 'custom'
++  const [formSharedWithIds, setFormSharedWithIds] = useState([]); // array of sharedUser IDs
++  const [formInlineShareName, setFormInlineShareName] = useState('');
++  const [formInlineShareRelation, setFormInlineShareRelation] = useState(() => relationGroups[0] || '친구');
++
++  useEffect(() => {
++    if (relationGroups && relationGroups.length > 0 && !relationGroups.includes(formInlineShareRelation)) {
++      setFormInlineShareRelation(relationGroups[0]);
++    }
++  }, [relationGroups]);
+ 
+   // Mobile Simulator state
+   const [mobileScreen, setMobileScreen] = useState('calendar'); // calendar, detail
+@@ -247,10 +312,11 @@ export default function App() {
+         eventAlarmTime: '전날 18:00',
+         enableRepeatAlarm: true,
+         excludeHolidays: true,
++        showHolidayCalendar: true,
+         showKoreanHolidays: true,
+         showAlternativeHolidays: true,
+         showLunarAnniversaries: true,
+-        showMyAnniversaries: false,
++        showMyAnniversaries: true,
+         workViewMode: 'badge',
+         aptViewMode: 'dot'
+       });
+@@ -265,6 +331,7 @@ export default function App() {
+         excludeHolidays: settingsData.excludeHolidays
+       });
+       setSettings({
++        showHolidayCalendar: settingsData.showHolidayCalendar !== false,
+         showKoreanHolidays: settingsData.showKoreanHolidays,
+         showAlternativeHolidays: settingsData.showAlternativeHolidays,
+         showLunarAnniversaries: settingsData.showLunarAnniversaries,
+@@ -290,10 +357,10 @@ export default function App() {
+       // 3. Get events
+       const localEventsFallback = (() => {
+         const saved = localStorage.getItem('weplan_events');
+-        return saved ? JSON.parse(saved) : INITIAL_EVENTS;
++        return saved ? shiftMockDatesToCurrentMonth(JSON.parse(saved)) : shiftMockDatesToCurrentMonth(INITIAL_EVENTS);
+       })();
+       const eventsData = await api.getEvents(localEventsFallback);
+-      const mappedEvents = eventsData.map(evt => {
++      const mappedEvents = shiftMockDatesToCurrentMonth(eventsData).map(evt => {
+         if (evt.participantsJson) {
+           try {
+             evt.participants = JSON.parse(evt.participantsJson);
+@@ -349,6 +416,7 @@ export default function App() {
+       eventAlarmTime: alarmSettings.eventAlarmTime,
+       enableRepeatAlarm: alarmSettings.enableRepeatAlarm,
+       excludeHolidays: alarmSettings.excludeHolidays,
++      showHolidayCalendar: settings.showHolidayCalendar,
+       showKoreanHolidays: settings.showKoreanHolidays,
+       showAlternativeHolidays: settings.showAlternativeHolidays,
+       showLunarAnniversaries: settings.showLunarAnniversaries,
+@@ -384,6 +452,64 @@ export default function App() {
+     api.saveSharedUsers(sharedUsers);
+   }, [dataLoaded, sharedUsers]);
+ 
++  // Scroll to selected settings card when tab changes (keeps calendar on screen)
++  useEffect(() => {
++    if (currentTab === 'calendar') {
++      setCalendarPerspective('me');
++      window.scrollTo({ top: 0, behavior: 'smooth' });
++    } else if (currentTab && currentTab !== 'settings' && currentTab !== 'stats' && currentTab !== 'shared') {
++      const idMap = {
++        schedule: 'card-schedule',
++        alarm: 'card-alarm',
++        records: 'card-birthday'
++      };
++      const element = document.getElementById(idMap[currentTab]);
++      if (element) {
++        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
++      }
++    }
++  }, [currentTab]);
++
++  useEffect(() => {
++    localStorage.setItem('weplan_right_sidebar_width', rightSidebarWidth);
++  }, [rightSidebarWidth]);
++
++  useEffect(() => {
++    localStorage.setItem('weplan_show_right_sidebar', showRightSidebar);
++  }, [showRightSidebar]);
++
++  const handleMouseDown = (e) => {
++    e.preventDefault();
++    setIsDragging(true);
++  };
++
++  useEffect(() => {
++    if (!isDragging) return;
++
++    document.body.classList.add('dragging-active');
++
++    const handleMouseMove = (e) => {
++      const newWidth = window.innerWidth - e.clientX;
++      if (newWidth >= 250 && newWidth <= 600) {
++        setRightSidebarWidth(newWidth);
++      }
++    };
++
++    const handleMouseUp = () => {
++      setIsDragging(false);
++      document.body.classList.remove('dragging-active');
++    };
++
++    document.addEventListener('mousemove', handleMouseMove);
++    document.addEventListener('mouseup', handleMouseUp);
++
++    return () => {
++      document.removeEventListener('mousemove', handleMouseMove);
++      document.removeEventListener('mouseup', handleMouseUp);
++      document.body.classList.remove('dragging-active');
++    };
++  }, [isDragging]);
++
+   // Date movement (Drag & Drop)
+   const handleMoveEvent = (eventId, targetDateStr) => {
+     setEvents(prev => prev.map(evt => {
+@@ -414,6 +540,27 @@ export default function App() {
+     }));
+   };
+ 
++  const handleAddInlineShareTarget = () => {
++    if (!formInlineShareName.trim()) return;
++    const newId = Date.now().toString();
++    const newTarget = {
++      id: newId,
++      name: formInlineShareName,
++      relation: formInlineShareRelation,
++      avatar: '',
++      privilege: '보기 가능',
++      isSharing: true
++    };
++    
++    const updatedUsers = [...sharedUsers, newTarget];
++    setSharedUsers(updatedUsers);
++    localStorage.setItem('weplan_shared_users', JSON.stringify(updatedUsers));
++    
++    setFormShareScope('custom');
++    setFormSharedWithIds(prev => [...prev, newId]);
++    setFormInlineShareName('');
++  };
++
+   // Add Event trigger
+   const handleOpenAddModal = (dateStr) => {
+     setSelectedDay(dateStr);
+@@ -428,6 +575,9 @@ export default function App() {
+     setFormTripStart(dateStr);
+     setFormTripEnd(dateStr);
+     setFormTripColor('blue');
++    setFormAptDisplayMode('dot');
++    setFormShareScope('public');
++    setFormSharedWithIds(sharedUsers.map(u => u.id));
+     setShowAddModal(true);
+   };
+ 
+@@ -452,12 +602,17 @@ export default function App() {
+       setFormIsRange(false);
+       setFormTripStart(evt.date || selectedDay);
+       setFormTripEnd(evt.date || selectedDay);
+-      setFormTripColor('blue');
++      setFormTripColor(evt.color || 'blue');
+       setFormAptTitle(evt.title || '');
+       setFormAptTime(evt.time || '12:00');
+       setFormAptPlace(evt.place || '');
+       setFormAptIsPrivate(evt.isPrivate || false);
++      setFormAptDisplayMode(evt.displayMode || 'dot');
+     }
++    const scope = evt.shareScope || (evt.isPrivate ? 'private' : 'public');
++    const sharedWith = evt.sharedWith || (evt.isPrivate ? [] : sharedUsers.map(u => u.id));
++    setFormShareScope(scope);
++    setFormSharedWithIds(sharedWith);
+     setShowAddModal(true);
+   };
+ 
+@@ -471,6 +626,12 @@ export default function App() {
+   // Submit Add/Edit Form
+   const handleFormSubmit = (e) => {
+     e.preventDefault();
++    if (formIsRange && formTripStart && formTripEnd) {
++      if (new Date(formTripEnd) < new Date(formTripStart)) {
++        alert('종료일은 시작일보다 빠를 수 없습니다.');
++        return;
++      }
++    }
+     if (editTarget) {
+       // Edit
+       setEvents(prev => prev.map(evt => {
+@@ -486,7 +647,10 @@ export default function App() {
+               endDate: formTripEnd,
+               place: formAptPlace,
+               color: formTripColor,
+-              date: undefined
++              date: undefined,
++              shareScope: formShareScope,
++              sharedWith: formSharedWithIds,
++              isPrivate: formShareScope === 'private'
+             };
+           } else {
+             return { 
+@@ -495,10 +659,14 @@ export default function App() {
+               title: formAptTitle, 
+               time: formAptTime, 
+               place: formAptPlace,
+-              isPrivate: formAptIsPrivate,
++              isPrivate: formShareScope === 'private',
++              displayMode: formAptDisplayMode,
+               date: editTarget.date || selectedDay,
+               startDate: undefined,
+-              endDate: undefined
++              endDate: undefined,
++              shareScope: formShareScope,
++              sharedWith: formSharedWithIds,
++              color: formTripColor
+             };
+           }
+         }
+@@ -523,13 +691,20 @@ export default function App() {
+         newEvent.endDate = formTripEnd;
+         newEvent.place = formAptPlace;
+         newEvent.color = formTripColor;
++        newEvent.shareScope = formShareScope;
++        newEvent.sharedWith = formSharedWithIds;
++        newEvent.isPrivate = formShareScope === 'private';
+       } else {
+         newEvent.type = 'appointment';
+         newEvent.date = selectedDay;
+         newEvent.title = formAptTitle;
+         newEvent.time = formAptTime;
+         newEvent.place = formAptPlace;
+-        newEvent.isPrivate = formAptIsPrivate;
++        newEvent.isPrivate = formShareScope === 'private';
++        newEvent.displayMode = formAptDisplayMode;
++        newEvent.shareScope = formShareScope;
++        newEvent.sharedWith = formSharedWithIds;
++        newEvent.color = formTripColor;
+       }
+       setEvents(prev => [...prev, newEvent]);
+     }
+@@ -582,336 +757,367 @@ export default function App() {
+   // Filter regular appointments for mock details on mobile simulator
+   const activeApt = events.find(e => e.id === 'apt-3') || INITIAL_EVENTS[2];
+ 
++  const selectedPerspectiveUser = sharedUsers.find(u => u.id === calendarPerspective);
++  const isReadOnlyPerspective = calendarPerspective !== 'me' && (!selectedPerspectiveUser || !selectedPerspectiveUser.privilege.includes('편집'));
++
+   return (
+-    <div className="app-container">
+-      {/* 1. Left Sidebar Navigation */}
+-      <SidebarLeft 
+-        currentTab={currentTab} 
+-        setCurrentTab={setCurrentTab} 
+-        sharedUsers={sharedUsers}
+-        onInviteFriend={handleInviteFriend}
+-        isPrivateMode={isPrivateMode}
+-        userName={userName}
+-        setUserName={setUserName}
+-        userJob={userJob}
+-        setUserJob={setUserJob}
+-      />
++    <div 
++      className={`app-container ${currentTab === 'settings' ? 'settings-active' : ''}`}
++      style={{
++        '--right-sidebar-width': showRightSidebar ? `${rightSidebarWidth}px` : '0px'
++      }}
++    >
++      {/* 1. Right Sidebar Detail */}
++      {currentTab !== 'settings' && showRightSidebar && (
++        <div className="sidebar-right-container" style={{ height: '100vh', position: 'sticky', top: 0 }}>
++          <div 
++            className={`resize-handle-v ${isDragging ? 'dragging' : ''}`}
++            onMouseDown={handleMouseDown}
++          />
++          <SidebarRight 
++            selectedDateStr={selectedDay}
++            events={events}
++            shifts={shifts}
++            onAddEventClick={handleOpenAddModal}
++            onEditEvent={handleEditEvent}
++            onDeleteEvent={handleDeleteEvent}
++            isPrivateMode={isPrivateMode}
++            holidaysMap={holidaysMap}
++            calendarPerspective={calendarPerspective}
++            sharedUsers={sharedUsers}
++            isReadOnlyPerspective={isReadOnlyPerspective}
++            settings={settings}
++          />
++        </div>
++      )}
+ 
+       {/* 2. Main Center Body */}
+       <main className="main-content">
+-        <div style={{ padding: '10px', backgroundColor: '#fee2e2', color: '#991b1b', borderRadius: '8px', fontSize: '11px', whiteSpace: 'pre-wrap', maxHeight: '150px', overflowY: 'auto', marginBottom: '10px' }}>
+-          <strong>[Debug Events]</strong> {JSON.stringify(events.map(e => ({ id: e.id, type: e.type, title: e.title || e.name, date: e.date, startDate: e.startDate, endDate: e.endDate })), null, 2)}
+-        </div>
+-        
+-        {/* Style View Customizer (Wow/Premium control banner) */}
+-        <div style={{
+-          display: 'flex',
+-          justifyContent: 'space-between',
+-          alignItems: 'center',
+-          backgroundColor: '#ffffff',
+-          padding: '12px 20px',
+-          borderRadius: 'var(--radius-lg)',
+-          boxShadow: 'var(--shadow-sm)',
+-          borderLeft: '4px solid var(--primary)'
+-        }}>
+-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+-            <Layers size={18} color="var(--primary)" />
+-            <span style={{ fontSize: '14px', fontWeight: '700' }}>캘린더 시각 요소 맞춤설정</span>
+-          </div>
++        {currentTab === 'settings' ? (
++          <div className="settings-page-wrapper fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '20px 0' }}>
++            <div className="settings-header" style={{ display: 'flex', flexDirection: 'column', gap: '4px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
++              <h2 style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
++                <Settings size={22} color="var(--primary)" />
++                설정
++              </h2>
++              <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
++                캘린더 표시 및 연동 설정을 구성합니다.
++              </p>
++            </div>
+ 
+-          <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+-            {/* Appointment style */}
+-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+-              <span style={{ fontSize: '12px', fontWeight: '500', color: 'var(--text-muted)' }}>약속 표시 형태:</span>
+-              <div className="header-view-toggle" style={{ margin: 0, padding: '2px' }}>
+-                <button 
+-                  onClick={() => setAptViewMode('dot')} 
+-                  className={`view-toggle-btn ${aptViewMode === 'dot' ? 'active' : ''}`}
+-                  style={{ padding: '4px 10px', fontSize: '11px' }}
+-                >
+-                  원 (점)
+-                </button>
+-                <button 
+-                  onClick={() => setAptViewMode('box')} 
+-                  className={`view-toggle-btn ${aptViewMode === 'box' ? 'active' : ''}`}
+-                  style={{ padding: '4px 10px', fontSize: '11px' }}
+-                >
+-                  네모 상자
+-                </button>
+-                <button 
+-                  onClick={() => setAptViewMode('both')} 
+-                  className={`view-toggle-btn ${aptViewMode === 'both' ? 'active' : ''}`}
+-                  style={{ padding: '4px 10px', fontSize: '11px' }}
+-                >
+-                  원 + 네모
+-                </button>
+-              </div>
++            <div style={{ maxWidth: '360px' }}>
++              <SettingsPanels 
++                shifts={shifts}
++                setShifts={setShifts}
++                alarmSettings={alarmSettings}
++                setAlarmSettings={setAlarmSettings}
++                settings={settings}
++                setSettings={setSettings}
++                sharedUsers={sharedUsers}
++                setSharedUsers={setSharedUsers}
++                isPrivateMode={isPrivateMode}
++                setIsPrivateMode={setIsPrivateMode}
++                onAddBirthday={handleAddBirthday}
++                onlyHolidayCalendar={true}
++                relationGroups={relationGroups}
++                setRelationGroups={setRelationGroups}
++                calendarPerspective={calendarPerspective}
++                setCalendarPerspective={setCalendarPerspective}
++              />
+             </div>
+           </div>
+-        </div>
+-
+-        {/* Calendar Grid component */}
+-        <CalendarGrid 
+-          currentDate={currentDate}
+-          setCurrentDate={setCurrentDate}
+-          events={events}
+-          shifts={shifts}
+-          settings={settings}
+-          viewMode={viewMode}
+-          setViewMode={setViewMode}
+-          workViewMode={workViewMode}
+-          aptViewMode={aptViewMode}
+-          onMoveEvent={handleMoveEvent}
+-          onSelectDay={setSelectedDay}
+-          selectedDay={selectedDay}
+-          onAddEventClick={handleOpenAddModal}
+-          isPrivateMode={isPrivateMode}
+-          holidaysMap={holidaysMap}
+-        />
+-
+-        {/* Bottom Configuration Panels */}
+-        <SettingsPanels 
+-          shifts={shifts}
+-          setShifts={setShifts}
+-          alarmSettings={alarmSettings}
+-          setAlarmSettings={setAlarmSettings}
+-          settings={settings}
+-          setSettings={setSettings}
+-          sharedUsers={sharedUsers}
+-          setSharedUsers={setSharedUsers}
+-          isPrivateMode={isPrivateMode}
+-          setIsPrivateMode={setIsPrivateMode}
+-          onAddBirthday={handleAddBirthday}
+-          onAddTripConnection={handleAddTripConnection}
+-          trips={currentTrips}
+-          onDisconnectTrip={handleDisconnectTrip}
+-        />
+-
+-        {/* Mobile Mockup Simulator title */}
+-        <div style={{ marginTop: '20px', textAlign: 'center' }}>
+-          <h2 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+-            <Smartphone size={20} color="var(--primary)" />
+-            모바일 화면 시뮬레이터 (MyShift 앱 반응형)
+-          </h2>
+-          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+-            하단 폰 화면에서 모바일 버전의 스케줄 확인 및 상세 일정/알림 조회를 모의 테스트해보세요.
+-          </p>
+-        </div>
+-
+-        {/* Mobile View Mockup (Double frames side-by-side or toggled) */}
+-        <div className="mobile-simulator-layout">
+-          {/* Phone 1: Mobile Calendar List */}
+-          <div className="phone-container">
+-            <div className="phone-header">
+-              <span>9:41</span>
+-              <span style={{ fontSize: '11px' }}>2024년 5월 ▾</span>
+-              <span>🔋 📶</span>
++        ) : (
++          <>
++            <CalendarGrid 
++              currentDate={currentDate}
++              setCurrentDate={setCurrentDate}
++              events={events}
++              shifts={shifts}
++              settings={settings}
++              viewMode={viewMode}
++              setViewMode={setViewMode}
++              workViewMode={workViewMode}
++              aptViewMode={aptViewMode}
++              onMoveEvent={handleMoveEvent}
++              onSelectDay={(dateStr) => {
++                setSelectedDay(dateStr);
++                const parts = dateStr.split('-');
++                setCurrentDate(new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)));
++              }}
++              selectedDay={selectedDay}
++              onAddEventClick={handleOpenAddModal}
++              onEditEvent={handleEditEvent}
++              isPrivateMode={isPrivateMode}
++              holidaysMap={holidaysMap}
++              calendarPerspective={calendarPerspective}
++              setCalendarPerspective={setCalendarPerspective}
++              sharedUsers={sharedUsers}
++              isReadOnlyPerspective={isReadOnlyPerspective}
++              showRightSidebar={showRightSidebar}
++              setShowRightSidebar={setShowRightSidebar}
++              currentTab={currentTab}
++            />
++
++            {/* Bottom Configuration Panels */}
++            <SettingsPanels 
++              shifts={shifts}
++              setShifts={setShifts}
++              alarmSettings={alarmSettings}
++              setAlarmSettings={setAlarmSettings}
++              settings={settings}
++              setSettings={setSettings}
++              sharedUsers={sharedUsers}
++              setSharedUsers={setSharedUsers}
++              isPrivateMode={isPrivateMode}
++              setIsPrivateMode={setIsPrivateMode}
++              onAddBirthday={handleAddBirthday}
++              hideHolidayCalendar={true}
++              hideSharedSettings={currentTab === 'calendar'}
++              onlySharedSettings={currentTab === 'shared'}
++              relationGroups={relationGroups}
++              setRelationGroups={setRelationGroups}
++              calendarPerspective={calendarPerspective}
++              setCalendarPerspective={setCalendarPerspective}
++            />
++
++            {/* Mobile Mockup Simulator title */}
++            <div style={{ marginTop: '20px', textAlign: 'center' }}>
++              <h2 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
++                <Smartphone size={20} color="var(--primary)" />
++                모바일 화면 시뮬레이터 (MyShift 앱 반응형)
++              </h2>
++              <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
++                하단 폰 화면에서 모바일 버전의 스케줄 확인 및 상세 일정/알림 조회를 모의 테스트해보세요.
++              </p>
+             </div>
+-            
+-            <div className="phone-screen" style={{ backgroundColor: '#f8fafc' }}>
+-              <div className="phone-body">
+-                {/* Mobile Shift header */}
+-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', flexWrap: 'wrap', gap: '4px' }}>
+-                  {Array.isArray(shifts) && shifts.map(s => (
+-                    <span key={s.id} className="legend-badge" style={{ backgroundColor: s.color + '20', color: s.color }}>{s.label}</span>
+-                  ))}
+-                  <span className="legend-badge" style={{ backgroundColor: 'var(--apt-bg)', color: 'var(--apt-text)' }}>약속</span>
+-                </div>
+ 
+-                {/* Mobile week bar */}
+-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', textAlign: 'center', backgroundColor: '#ffffff', borderRadius: '12px', padding: '10px 4px', boxShadow: 'var(--shadow-sm)' }}>
+-                  {['일', '월', '화', '수', '목', '금', '토'].map((w, idx) => (
+-                    <span key={idx} style={{ fontSize: '11px', color: idx === 0 ? '#ef4444' : (idx === 6 ? '#3b82f6' : 'var(--text-muted)') }}>{w}</span>
+-                  ))}
+-                  {/* Mock week 12-18 */}
+-                  {[12, 13, 14, 15, 16, 17, 18].map(day => (
+-                    <span key={day} style={{ 
+-                      fontSize: '13px', 
+-                      fontWeight: '700', 
+-                      marginTop: '6px',
+-                      padding: '4px',
+-                      borderRadius: '50%',
+-                      backgroundColor: day === 15 ? 'var(--primary)' : 'transparent',
+-                      color: day === 15 ? '#ffffff' : 'inherit'
+-                    }}>
+-                      {day}
+-                    </span>
+-                  ))}
++            {/* Mobile View Mockup (Double frames side-by-side or toggled) */}
++            <div className="mobile-simulator-layout">
++              {/* Phone 1: Mobile Calendar List */}
++              <div className="phone-container">
++                <div className="phone-header">
++                  <span>9:41</span>
++                  <span style={{ fontSize: '11px' }}>{currentDate.getFullYear()}년 {currentDate.getMonth() + 1}월 ▾</span>
++                  <span>🔋 📶</span>
+                 </div>
++                
++                <div className="phone-screen" style={{ backgroundColor: '#f8fafc' }}>
++                  <div className="phone-body">
++                    {/* Mobile Shift header */}
++                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', flexWrap: 'wrap', gap: '4px' }}>
++                      {Array.isArray(shifts) && shifts.map(s => (
++                        <span key={s.id} className="legend-badge" style={{ backgroundColor: s.color + '20', color: s.color }}>{s.label}</span>
++                      ))}
++                      <span className="legend-badge" style={{ backgroundColor: 'var(--apt-bg)', color: 'var(--apt-text)' }}>약속</span>
++                    </div>
+ 
+-                {/* Mobile daily timeline (May 15) */}
+-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+-                  <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>07:00</div>
+-                  {shifts[0] && (
+-                    <div style={{ 
+-                      backgroundColor: shifts[0].color + '15', 
+-                      color: shifts[0].color, 
+-                      padding: '10px 14px', 
+-                      borderRadius: '12px', 
+-                      borderLeft: `4px solid ${shifts[0].color}` 
+-                    }}>
+-                      <div style={{ fontWeight: '700', fontSize: '13px' }}>{shifts[0].label} 근무</div>
+-                      <span style={{ fontSize: '11px' }}>{shifts[0].start} - {shifts[0].end} (지정 근무)</span>
++                    {/* Mobile week bar */}
++                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', textAlign: 'center', backgroundColor: '#ffffff', borderRadius: '12px', padding: '10px 4px', boxShadow: 'var(--shadow-sm)' }}>
++                      {['일', '월', '화', '수', '목', '금', '토'].map((w, idx) => (
++                        <span key={idx} style={{ fontSize: '11px', color: idx === 0 ? '#ef4444' : (idx === 6 ? '#3b82f6' : 'var(--text-muted)') }}>{w}</span>
++                      ))}
++                      {/* Mock week 12-18 */}
++                      {[12, 13, 14, 15, 16, 17, 18].map(day => (
++                        <span key={day} style={{ 
++                          fontSize: '13px', 
++                          fontWeight: '700', 
++                          marginTop: '6px',
++                          padding: '4px',
++                          borderRadius: '50%',
++                          backgroundColor: day === 15 ? 'var(--primary)' : 'transparent',
++                          color: day === 15 ? '#ffffff' : 'inherit'
++                        }}>
++                          {day}
++                        </span>
++                      ))}
+                     </div>
+-                  )}
+ 
+-                  <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', marginTop: '8px' }}>12:30</div>
+-                  <div style={{ backgroundColor: 'var(--apt-bg)', color: 'var(--apt-text)', padding: '10px 14px', borderRadius: '12px', borderLeft: '4px solid var(--apt-dot)' }}>
+-                    <div style={{ fontWeight: '700', fontSize: '13px' }}>친구랑 점심</div>
+-                    <span style={{ fontSize: '11px' }}>12:30 - 13:30 @ 강남역 맛집</span>
+-                  </div>
++                    {/* Mobile daily timeline (May 15) */}
++                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
++                      <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>07:00</div>
++                      {shifts[0] && (
++                        <div style={{ 
++                          backgroundColor: shifts[0].color + '15', 
++                          color: shifts[0].color, 
++                          padding: '10px 14px', 
++                          borderRadius: '12px', 
++                          borderLeft: `4px solid ${shifts[0].color}` 
++                        }}>
++                          <div style={{ fontWeight: '700', fontSize: '13px' }}>{shifts[0].label} 근무</div>
++                          <span style={{ fontSize: '11px' }}>{shifts[0].start} - {shifts[0].end} (지정 근무)</span>
++                        </div>
++                      )}
+ 
+-                  <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', marginTop: '8px' }}>18:00</div>
+-                  <div style={{ backgroundColor: '#f1f5f9', color: '#334155', padding: '10px 14px', borderRadius: '12px' }}>
+-                    <div style={{ fontWeight: '700', fontSize: '13px' }}>헬스</div>
+-                    <span style={{ fontSize: '11px' }}>18:00 - 19:30 @ 헬스장</span>
++                      <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', marginTop: '8px' }}>12:30</div>
++                      <div style={{ backgroundColor: 'var(--apt-bg)', color: 'var(--apt-text)', padding: '10px 14px', borderRadius: '12px', borderLeft: '4px solid var(--apt-dot)' }}>
++                        <div style={{ fontWeight: '700', fontSize: '13px' }}>친구랑 점심</div>
++                        <span style={{ fontSize: '11px' }}>12:30 - 13:30 @ 강남역 맛집</span>
++                      </div>
++
++                      <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', marginTop: '8px' }}>18:00</div>
++                      <div style={{ backgroundColor: '#f1f5f9', color: '#334155', padding: '10px 14px', borderRadius: '12px' }}>
++                        <div style={{ fontWeight: '700', fontSize: '13px' }}>헬스</div>
++                        <span style={{ fontSize: '11px' }}>18:00 - 19:30 @ 헬스장</span>
++                      </div>
++                    </div>
+                   </div>
+                 </div>
+-              </div>
+-            </div>
+ 
+-            {/* Mobile bottom navigation */}
+-            <div style={{ display: 'flex', justifyContent: 'space-around', padding: '10px 0', borderTop: '1px solid var(--border-color)', backgroundColor: '#ffffff', fontSize: '10px', color: 'var(--text-muted)' }}>
+-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'var(--primary)' }}>
+-                <span>📅</span>
+-                <span>캘린더</span>
+-              </div>
+-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+-                <span>📋</span>
+-                <span>일정</span>
+-              </div>
+-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+-                <span>🔔</span>
+-                <span>알림</span>
+-              </div>
+-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+-                <span>👥</span>
+-                <span>공유</span>
++                {/* Mobile bottom navigation */}
++                <div style={{ display: 'flex', justifyContent: 'space-around', padding: '10px 0', borderTop: '1px solid var(--border-color)', backgroundColor: '#ffffff', fontSize: '10px', color: 'var(--text-muted)' }}>
++                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'var(--primary)' }}>
++                    <span>📅</span>
++                    <span>캘린더</span>
++                  </div>
++                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
++                    <span>📋</span>
++                    <span>일정</span>
++                  </div>
++                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
++                    <span>🔔</span>
++                    <span>알림</span>
++                  </div>
++                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
++                    <span>👥</span>
++                    <span>공유</span>
++                  </div>
++                </div>
+               </div>
+-            </div>
+-          </div>
+-
+-          {/* Phone 2: Mobile Event Details */}
+-          <div className="phone-container">
+-            <div className="phone-header">
+-              <span>9:41</span>
+-              <span style={{ fontWeight: '700' }}>일정 상세</span>
+-              <span>🔋 📶</span>
+-            </div>
+ 
+-            <div className="phone-screen">
+-              <div className="phone-body">
+-                {/* Tabs */}
+-                <div className="detail-tab-row">
+-                  <div className="detail-tab">일 (근무)</div>
+-                  <div className="detail-tab active">약속</div>
++              {/* Phone 2: Mobile Event Details */}
++              <div className="phone-container">
++                <div className="phone-header">
++                  <span>9:41</span>
++                  <span style={{ fontWeight: '700' }}>일정 상세</span>
++                  <span>🔋 📶</span>
+                 </div>
+ 
+-                {/* Event Header */}
+-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+-                  <h2 style={{ fontSize: '18px', fontWeight: '700' }}>{activeApt.title}</h2>
+-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+-                    <Clock size={12} />
+-                    <span>2024.05.15 (수) {activeApt.time} - 13:30</span>
+-                  </div>
+-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+-                    <MapPin size={12} />
+-                    <span>{activeApt.place}</span>
+-                  </div>
+-                </div>
++                <div className="phone-screen">
++                  <div className="phone-body">
++                    {/* Tabs */}
++                    <div className="detail-tab-row">
++                      <div className="detail-tab">일 (근무)</div>
++                      <div className="detail-tab active">약속</div>
++                    </div>
+ 
+-                {/* Participants */}
+-                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
+-                  <span style={{ fontSize: '12px', fontWeight: '600', display: 'block', marginBottom: '8px' }}>참여자</span>
+-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+-                    {activeApt.participants ? activeApt.participants.map((p, idx) => (
+-                      <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+-                        <img 
+-                          src={p.avatar} 
+-                          alt={p.name} 
+-                          style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} 
+-                        />
+-                        <span style={{ fontSize: '10px' }}>{p.name}</span>
++                    {/* Event Header */}
++                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
++                      <h2 style={{ fontSize: '18px', fontWeight: '700' }}>{activeApt.title}</h2>
++                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
++                        <Clock size={12} />
++                        <span>
++                          {(() => {
++                            if (!activeApt.date) return '';
++                            const activeDate = new Date(activeApt.date + "T00:00:00");
++                            const mm = String(activeDate.getMonth() + 1).padStart(2, '0');
++                            const dd = String(activeDate.getDate()).padStart(2, '0');
++                            const dayName = activeDate.toLocaleDateString('ko-KR', { weekday: 'short' });
++                            return `${activeDate.getFullYear()}.${mm}.${dd} (${dayName})`;
++                          })()} {activeApt.time} - 13:30
++                        </span>
+                       </div>
+-                    )) : (
+-                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>나 단독 일정</span>
+-                    )}
+-                    <button 
+-                      style={{ width: '36px', height: '36px', borderRadius: '50%', border: '1px dashed var(--border-color)', display: 'flex', alignItems: 'center', justifyStyle: 'center', fontSize: '16px', color: 'var(--text-muted)', justifyContent: 'center' }}
+-                      onClick={handleInviteFriend}
+-                    >
+-                      +
+-                    </button>
+-                  </div>
+-                </div>
++                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
++                        <MapPin size={12} />
++                        <span>{activeApt.place}</span>
++                      </div>
++                    </div>
+ 
+-                {/* Alarm Settings simulator */}
+-                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+-                  <span style={{ fontSize: '12px', fontWeight: '600' }}>알람 설정</span>
+-                  
+-                  <div className="toggle-switch-row">
+-                    <span>전날 18:00 알람</span>
+-                    <label className="switch" style={{ width: '36px', height: '20px' }}>
+-                      <input type="checkbox" defaultChecked />
+-                      <span className="slider"></span>
+-                    </label>
+-                  </div>
++                    {/* Participants */}
++                    <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
++                      <span style={{ fontSize: '12px', fontWeight: '600', display: 'block', marginBottom: '8px' }}>참여자</span>
++                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
++                        {activeApt.participants ? activeApt.participants.map((p, idx) => (
++                          <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
++                            <img 
++                              src={p.avatar} 
++                              alt={p.name} 
++                              style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} 
++                            />
++                            <span style={{ fontSize: '10px' }}>{p.name}</span>
++                          </div>
++                        )) : (
++                          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>나 단독 일정</span>
++                        )}
++                        <button 
++                          style={{ width: '36px', height: '36px', borderRadius: '50%', border: '1px dashed var(--border-color)', display: 'flex', alignItems: 'center', justifyStyle: 'center', fontSize: '16px', color: 'var(--text-muted)', justifyContent: 'center' }}
++                          onClick={handleInviteFriend}
++                        >
++                          +
++                        </button>
++                      </div>
++                    </div>
+ 
+-                  <div className="toggle-switch-row">
+-                    <span>1시간 전 알림</span>
+-                    <label className="switch" style={{ width: '36px', height: '20px' }}>
+-                      <input type="checkbox" />
+-                      <span className="slider"></span>
+-                    </label>
+-                  </div>
+-                </div>
++                    {/* Alarm Settings simulator */}
++                    <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
++                      <span style={{ fontSize: '12px', fontWeight: '600' }}>알람 설정</span>
++                      
++                      <div className="toggle-switch-row">
++                        <span>전날 18:00 알람</span>
++                        <label className="switch" style={{ width: '36px', height: '20px' }}>
++                          <input type="checkbox" defaultChecked />
++                          <span className="slider"></span>
++                        </label>
++                      </div>
+ 
+-                {/* Repeat settings */}
+-                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+-                  <span>반복</span>
+-                  <span style={{ color: 'var(--text-muted)' }}>반복 안함 ❯</span>
+-                </div>
++                      <div className="toggle-switch-row">
++                        <span>1시간 전 알림</span>
++                        <label className="switch" style={{ width: '36px', height: '20px' }}>
++                          <input type="checkbox" />
++                          <span className="slider"></span>
++                        </label>
++                      </div>
++                    </div>
+ 
+-                {/* Edit / Delete footer */}
+-                <div style={{ marginTop: 'auto', display: 'flex', gap: '10px' }}>
+-                  <button 
+-                    className="btn-secondary" 
+-                    style={{ flex: 1, padding: '10px' }}
+-                    onClick={() => alert('삭제는 상단 데스크탑 상세창에서 가능합니다.')}
+-                  >
+-                    삭제
+-                  </button>
+-                  <button 
+-                    className="btn-save" 
+-                    style={{ flex: 2, padding: '10px' }}
+-                    onClick={() => alert('수정은 상단 데스크탑 상세창에서 가능합니다.')}
+-                  >
+-                    수정
+-                  </button>
++                    {/* Repeat settings */}
++                    <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
++                      <span>반복</span>
++                      <span style={{ color: 'var(--text-muted)' }}>반복 안함 ❯</span>
++                    </div>
++
++                    {/* Edit / Delete footer */}
++                    <div style={{ marginTop: 'auto', display: 'flex', gap: '10px' }}>
++                      <button 
++                        className="btn-secondary" 
++                        style={{ flex: 1, padding: '10px' }}
++                        onClick={() => alert('삭제는 상단 데스크탑 상세창에서 가능합니다.')}
++                      >
++                        삭제
++                      </button>
++                      <button 
++                        className="btn-save" 
++                        style={{ flex: 2, padding: '10px' }}
++                        onClick={() => alert('수정은 상단 데스크탑 상세창에서 가능합니다.')}
++                      >
++                        수정
++                      </button>
++                    </div>
++                  </div>
+                 </div>
+               </div>
+             </div>
+-          </div>
+-        </div>
+-
++          </>
++        )}
+       </main>
+ 
+-      {/* 3. Right Sidebar Detail */}
+-      <SidebarRight 
+-        selectedDateStr={selectedDay}
+-        events={events}
+-        shifts={shifts}
+-        onAddEventClick={handleOpenAddModal}
+-        onEditEvent={handleEditEvent}
+-        onDeleteEvent={handleDeleteEvent}
++      {/* 3. Left Sidebar Navigation */}
++      <SidebarLeft 
++        currentTab={currentTab} 
++        setCurrentTab={setCurrentTab} 
++        sharedUsers={sharedUsers}
++        onInviteFriend={handleInviteFriend}
+         isPrivateMode={isPrivateMode}
+-        holidaysMap={holidaysMap}
++        userName={userName}
++        setUserName={setUserName}
++        userJob={userJob}
++        setUserJob={setUserJob}
++        calendarPerspective={calendarPerspective}
++        setCalendarPerspective={setCalendarPerspective}
+       />
+ 
+       {/* 4. Add/Edit Shift or Appointment Modal overlay */}
+       {showAddModal && (
+-        <div className="dialog-overlay">
+-          <div className="dialog-content">
++        <div className="dialog-overlay" onClick={() => setShowAddModal(false)}>
++          <div className="dialog-content" onClick={(e) => e.stopPropagation()}>
+             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+               <h3 style={{ fontSize: '16px', fontWeight: '700' }}>
+                 {editTarget ? '일정 수정하기' : `${selectedDay} 일정 추가`}
+@@ -921,7 +1127,23 @@ export default function App() {
+               </button>
+             </div>
+ 
++            {isReadOnlyPerspective && (
++              <div style={{
++                color: '#ef4444',
++                backgroundColor: '#fee2e2',
++                border: '1px solid #fca5a5',
++                padding: '8px 12px',
++                borderRadius: '6px',
++                fontSize: '11px',
++                fontWeight: 'bold',
++                marginTop: '10px'
++              }}>
++                ⚠️ 보기 전용 모드입니다. 이 캘린더에 대한 편집 권한이 없어 일정을 추가, 수정 또는 삭제할 수 없습니다.
++              </div>
++            )}
++
+             <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
++              <fieldset disabled={isReadOnlyPerspective} style={{ border: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+               
+               {/* Type Switch (Only show if not editing or editing a non-trip event) */}
+               {!editTarget && (
+@@ -931,14 +1153,14 @@ export default function App() {
+                     className={`solar-lunar-btn ${formType === 'shift' ? 'active' : ''}`}
+                     onClick={() => setFormType('shift')}
+                   >
+-                    근무 스케줄 (간호사)
++                    근무 스케줄
+                   </button>
+                   <button 
+                     type="button" 
+                     className={`solar-lunar-btn ${formType === 'appointment' ? 'active' : ''}`}
+                     onClick={() => setFormType('appointment')}
+                   >
+-                    개인 약속 / 행사
++                    일정 / 약속
+                   </button>
+                 </div>
+               )}
+@@ -965,7 +1187,7 @@ export default function App() {
+                 <>
+                   <div className="toggle-switch-row" style={{ margin: '4px 0 10px 0' }}>
+                     <span className="settings-label" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
+-                      📅 여러 날짜에 걸친 일정 (기간 설정)
++                      기간 설정
+                     </span>
+                     <label className="switch">
+                       <input 
+@@ -1027,16 +1249,35 @@ export default function App() {
+                         </div>
+                         <div className="settings-form-row">
+                           <span className="settings-label">배너 색상</span>
+-                          <select 
+-                            value={formTripColor}
+-                            onChange={(e) => setFormTripColor(e.target.value)}
+-                            className="input-text"
+-                            style={{ height: '38px', padding: '0 10px' }}
+-                          >
+-                            <option value="blue">파란색 (기본)</option>
+-                            <option value="purple">보라색</option>
+-                            <option value="emerald">초록색</option>
+-                          </select>
++                          <div style={{ display: 'flex', gap: '8px', marginTop: '6px', alignItems: 'center' }}>
++                            {[
++                              { value: 'blue', hex: '#3b82f6', label: '파란색' },
++                              { value: 'purple', hex: '#a855f7', label: '보라색' },
++                              { value: 'emerald', hex: '#10b981', label: '초록색' },
++                              { value: 'orange', hex: '#f97316', label: '주황색' },
++                              { value: 'pink', hex: '#ec4899', label: '분홍색' }
++                            ].map(opt => (
++                              <button
++                                key={opt.value}
++                                type="button"
++                                onClick={() => setFormTripColor(opt.value)}
++                                style={{
++                                  width: '24px',
++                                  height: '24px',
++                                  borderRadius: '50%',
++                                  backgroundColor: opt.hex + '25',
++                                  border: formTripColor === opt.value ? `2.5px solid ${opt.hex}` : `1px solid ${opt.hex}40`,
++                                  padding: 0,
++                                  cursor: 'pointer',
++                                  transform: formTripColor === opt.value ? 'scale(1.2)' : 'scale(1)',
++                                  transition: 'all 0.15s ease-in-out',
++                                  outline: 'none',
++                                  boxShadow: formTripColor === opt.value ? '0 2px 4px rgba(0,0,0,0.1)' : 'none'
++                                }}
++                                title={opt.label}
++                              />
++                            ))}
++                          </div>
+                         </div>
+                       </div>
+                     </>
+@@ -1065,32 +1306,289 @@ export default function App() {
+                         </div>
+                       </div>
+ 
+-                      <div className="toggle-switch-row" style={{ marginTop: '4px' }}>
+-                        <span className="settings-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+-                          🔒 일정 나만 보기 (공유 시 비공개)
+-                        </span>
+-                        <label className="switch">
+-                          <input 
+-                            type="checkbox" 
+-                            checked={formAptIsPrivate}
+-                            onChange={(e) => setFormAptIsPrivate(e.target.checked)}
+-                          />
+-                          <span className="slider"></span>
+-                        </label>
++                      <div className="settings-form-row" style={{ marginTop: '10px' }}>
++                        <span className="settings-label">일정 색상</span>
++                        <div style={{ display: 'flex', gap: '8px', marginTop: '6px', alignItems: 'center' }}>
++                          {[
++                            { value: 'blue', hex: '#3b82f6', label: '파란색' },
++                            { value: 'purple', hex: '#a855f7', label: '보라색' },
++                            { value: 'emerald', hex: '#10b981', label: '초록색' },
++                            { value: 'orange', hex: '#f97316', label: '주황색' },
++                            { value: 'pink', hex: '#ec4899', label: '분홍색' }
++                          ].map(opt => (
++                            <button
++                              key={opt.value}
++                              type="button"
++                              onClick={() => setFormTripColor(opt.value)}
++                              style={{
++                                width: '24px',
++                                height: '24px',
++                                borderRadius: '50%',
++                                backgroundColor: opt.hex + '25',
++                                border: formTripColor === opt.value ? `2.5px solid ${opt.hex}` : `1px solid ${opt.hex}40`,
++                                padding: 0,
++                                cursor: 'pointer',
++                                transform: formTripColor === opt.value ? 'scale(1.2)' : 'scale(1)',
++                                transition: 'all 0.15s ease-in-out',
++                                outline: 'none',
++                                boxShadow: formTripColor === opt.value ? '0 2px 4px rgba(0,0,0,0.1)' : 'none'
++                              }}
++                              title={opt.label}
++                            />
++                          ))}
++                        </div>
++                      </div>
++
++                      <div className="settings-form-row" style={{ marginTop: '10px' }}>
++                        <span className="settings-label">표시 형태</span>
++                        <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
++                          <button
++                            type="button"
++                            onClick={() => setFormAptDisplayMode('dot')}
++                            style={{
++                              flex: 1,
++                              display: 'flex',
++                              flexDirection: 'column',
++                              alignItems: 'center',
++                              padding: '12px',
++                              borderRadius: '8px',
++                              border: `2px solid ${formAptDisplayMode === 'dot' ? 'var(--primary)' : 'var(--border-color)'}`,
++                              backgroundColor: formAptDisplayMode === 'dot' ? 'var(--primary-light)' : '#ffffff',
++                              cursor: 'pointer',
++                              transition: 'all 0.15s ease',
++                              outline: 'none'
++                            }}
++                          >
++                            {/* Mini preview */}
++                            <div style={{
++                              display: 'flex',
++                              alignItems: 'center',
++                              gap: '4px',
++                              fontSize: '10px',
++                              color: '#334155',
++                              padding: '6px 10px',
++                              border: '1px solid #e2e8f0',
++                              borderRadius: '4px',
++                              backgroundColor: '#ffffff',
++                              width: '100%',
++                              justifyContent: 'center'
++                            }}>
++                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#3b82f6', display: 'inline-block' }}></span>
++                              <span style={{ fontSize: '11px', fontWeight: '600' }}>일정 제목</span>
++                            </div>
++                          </button>
++
++                          <button
++                            type="button"
++                            onClick={() => setFormAptDisplayMode('box')}
++                            style={{
++                              flex: 1,
++                              display: 'flex',
++                              flexDirection: 'column',
++                              alignItems: 'center',
++                              padding: '12px',
++                              borderRadius: '8px',
++                              border: `2px solid ${formAptDisplayMode === 'box' ? 'var(--primary)' : 'var(--border-color)'}`,
++                              backgroundColor: formAptDisplayMode === 'box' ? 'var(--primary-light)' : '#ffffff',
++                              cursor: 'pointer',
++                              transition: 'all 0.15s ease',
++                              outline: 'none'
++                            }}
++                          >
++                            {/* Mini preview */}
++                            <div style={{
++                              display: 'flex',
++                              alignItems: 'center',
++                              fontSize: '10px',
++                              color: '#1e3a8a',
++                              backgroundColor: '#eff6ff',
++                              border: '1px solid #bfdbfe',
++                              borderLeft: '4px solid #3b82f6',
++                              padding: '6px 10px 6px 8px',
++                              borderRadius: '4px',
++                              width: '100%',
++                              justifyContent: 'center'
++                            }}>
++                              <span style={{ fontSize: '11px', fontWeight: '700' }}>일정 제목</span>
++                            </div>
++                          </button>
++                        </div>
+                       </div>
+                     </>
+                   )}
++
++                  <div className="settings-form-row" style={{ marginTop: '10px' }}>
++                    <span className="settings-label" style={{ fontWeight: '700', marginBottom: '6px', display: 'block' }}>
++                      공유 범위 설정 (일정 공개 대상)
++                    </span>
++                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
++                      {/* Option 1: 나만 보기 */}
++                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', cursor: 'pointer' }}>
++                        <input 
++                          type="radio" 
++                          name="shareScope" 
++                          checked={formShareScope === 'private'}
++                          onChange={() => {
++                            setFormShareScope('private');
++                            setFormSharedWithIds([]);
++                          }}
++                        />
++                        <span>나만 보기 (비공개)</span>
++                      </label>
++
++                      {/* Option 2: 전체 공개 */}
++                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', cursor: 'pointer' }}>
++                        <input 
++                          type="radio" 
++                          name="shareScope" 
++                          checked={formShareScope === 'public'}
++                          onChange={() => {
++                            setFormShareScope('public');
++                            setFormSharedWithIds(sharedUsers.map(u => u.id));
++                          }}
++                        />
++                        <span>전체 공개 (연동된 모든 친구)</span>
++                      </label>
++
++                      {/* Option 3: 특정 친구 선택 */}
++                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', cursor: 'pointer' }}>
++                        <input 
++                          type="radio" 
++                          name="shareScope" 
++                          checked={formShareScope === 'custom'}
++                          onChange={() => setFormShareScope('custom')}
++                        />
++                        <span>특정 친구 지정</span>
++                      </label>
++
++                      {/* Checkbox list of friends if custom is selected */}
++                      {formShareScope === 'custom' && (
++                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', paddingLeft: '20px', marginTop: '4px' }}>
++                          {sharedUsers.map(user => {
++                            const isChecked = formSharedWithIds.includes(user.id);
++                            return (
++                              <label key={user.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', cursor: 'pointer', backgroundColor: '#ffffff', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1' }}>
++                                <input 
++                                  type="checkbox"
++                                  checked={isChecked}
++                                  onChange={() => {
++                                    if (isChecked) {
++                                      setFormSharedWithIds(formSharedWithIds.filter(id => id !== user.id));
++                                    } else {
++                                      setFormSharedWithIds([...formSharedWithIds, user.id]);
++                                    }
++                                  }}
++                                />
++                                <span>{user.name}</span>
++                              </label>
++                            );
++                          })}
++                        </div>
++                      )}
++
++                      <div style={{ borderTop: '1px dashed #cbd5e1', marginTop: '6px', paddingTop: '8px' }}>
++                        <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--text-muted)', marginBottom: '4px' }}>
++                          새로운 공유인 추가 (해당 일정 공유)
++                        </div>
++                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
++                          <input 
++                            type="text"
++                            placeholder="친구 이름"
++                            className="input-text"
++                            style={{ padding: '4px 8px', fontSize: '11px', height: '26px', flex: 2 }}
++                            value={formInlineShareName}
++                            onChange={(e) => setFormInlineShareName(e.target.value)}
++                          />
++                          <select 
++                            style={{ padding: '2px 4px', fontSize: '11px', height: '26px', flex: 1.5, borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: '#ffffff' }}
++                            value={formInlineShareRelation}
++                            onChange={(e) => setFormInlineShareRelation(e.target.value)}
++                          >
++                            {relationGroups.map(group => (
++                              <option key={group} value={group}>{group}</option>
++                            ))}
++                          </select>
++                          <button
++                            type="button"
++                            onClick={handleAddInlineShareTarget}
++                            style={{
++                              padding: '4px 10px',
++                              fontSize: '11px',
++                              backgroundColor: 'var(--primary)',
++                              color: '#ffffff',
++                              border: 'none',
++                              borderRadius: '4px',
++                              cursor: 'pointer',
++                              height: '26px',
++                              fontWeight: '600'
++                            }}
++                          >
++                            추가
++                          </button>
++                        </div>
++                      </div>
++                    </div>
++                  </div>
+                 </>
+               )}
+ 
++              </fieldset>
++
+               <div className="dialog-footer">
+-                <button type="button" onClick={() => setShowAddModal(false)} className="btn-secondary">
+-                  취소
+-                </button>
+-                <button type="submit" className="btn-save" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+-                  <Check size={14} />
+-                  <span>저장</span>
+-                </button>
++                {isReadOnlyPerspective ? (
++                  <button 
++                    type="button" 
++                    onClick={() => setShowAddModal(false)} 
++                    className="btn-secondary"
++                    style={{ width: '100%', justifyContent: 'center' }}
++                  >
++                    닫기 (읽기 전용)
++                  </button>
++                ) : (
++                  <>
++                    {editTarget && (
++                      <button 
++                        type="button" 
++                        onClick={() => {
++                          handleDeleteEvent(editTarget.id);
++                          setShowAddModal(false);
++                        }} 
++                        style={{
++                          marginRight: 'auto',
++                          display: 'flex',
++                          alignItems: 'center',
++                          gap: '4px',
++                          padding: '8px 16px',
++                          borderRadius: 'var(--radius-sm)',
++                          backgroundColor: '#fee2e2',
++                          color: '#ef4444',
++                          border: '1px solid #fca5a5',
++                          fontWeight: '600',
++                          fontSize: '13px',
++                          cursor: 'pointer',
++                          transition: 'background-color 0.15s ease'
++                        }}
++                        onMouseEnter={(e) => {
++                          e.currentTarget.style.backgroundColor = '#fecaca';
++                        }}
++                        onMouseLeave={(e) => {
++                          e.currentTarget.style.backgroundColor = '#fee2e2';
++                        }}
++                      >
++                        <Trash2 size={14} />
++                        <span>삭제</span>
++                      </button>
++                    )}
++                    
++                    <button type="button" onClick={() => setShowAddModal(false)} className="btn-secondary">
++                      취소
++                    </button>
++                    <button type="submit" className="btn-save" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
++                      <Check size={14} />
++                      <span>저장</span>
++                    </button>
++                  </>
++                )}
+               </div>
+ 
+             </form>
+diff --git a/frontend/src/index.css b/frontend/src/index.css
+index 1cd5331..b296db0 100644
+--- a/frontend/src/index.css
++++ b/frontend/src/index.css
+@@ -101,24 +101,62 @@ input, select, textarea {
+   animation: fadeIn 0.3s ease forwards;
+ }
+ 
++@keyframes popScale {
++  from { transform: scale(0.95); opacity: 0; }
++  to { transform: scale(1); opacity: 1; }
++}
++
++.pop-scale {
++  animation: popScale 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
++}
++
+ /* Layout Wrappers */
+ .app-container {
+   display: grid;
+-  grid-template-columns: 240px 1fr 340px;
++  grid-template-columns: 240px 1fr var(--right-sidebar-width, 340px);
+   min-height: 100vh;
+   background-color: var(--bg-app);
+ }
+ 
+ @media (max-width: 1200px) {
+   .app-container {
+-    grid-template-columns: 80px 1fr 300px;
++    grid-template-columns: 80px 1fr var(--right-sidebar-width, 300px);
++  }
++}
++
++.app-container.settings-active {
++  grid-template-columns: 240px 1fr;
++}
++
++@media (max-width: 1200px) {
++  .app-container.settings-active {
++    grid-template-columns: 80px 1fr;
+   }
+ }
+ 
++/* Layout placement rules */
++.sidebar-left {
++  grid-column: 1;
++}
++.main-content {
++  grid-column: 2;
++}
++.sidebar-right-container {
++  grid-column: 3;
++}
++
++.app-container.settings-active .sidebar-left {
++  grid-column: 1;
++}
++.app-container.settings-active .main-content {
++  grid-column: 2;
++}
++
+ /* Left Sidebar */
+ .sidebar-left {
+   background-color: var(--bg-card);
+   border-right: 1px solid var(--border-color);
++  border-left: none;
+   padding: 24px 16px;
+   display: flex;
+   flex-direction: column;
+@@ -373,6 +411,14 @@ input, select, textarea {
+   flex: 1;
+ }
+ 
++.grid-days.week-view .week-row {
++  grid-auto-rows: minmax(300px, 1fr);
++}
++
++.grid-days.week-view .day-cell {
++  min-height: 300px;
++}
++
+ .week-row {
+   display: grid;
+   grid-template-columns: repeat(7, 1fr);
+@@ -579,6 +625,7 @@ input, select, textarea {
+ .sidebar-right {
+   background-color: var(--bg-card);
+   border-left: 1px solid var(--border-color);
++  border-right: none;
+   padding: 24px 20px;
+   display: flex;
+   flex-direction: column;
+@@ -664,11 +711,48 @@ input, select, textarea {
+   margin-top: 4px;
+ }
+ 
++.participant-wrapper {
++  position: relative;
++}
++
+ .participant-avatar {
+   width: 20px;
+   height: 20px;
+   border-radius: 50%;
+   object-fit: cover;
++  transition: transform 0.15s ease, box-shadow 0.15s ease;
++}
++
++.participant-avatar:hover {
++  transform: scale(1.1);
++  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
++}
++
++.participant-tooltip-bubble {
++  visibility: hidden;
++  position: absolute;
++  bottom: 130%;
++  left: 50%;
++  transform: translateX(-50%) translateY(4px);
++  background-color: rgba(15, 23, 42, 0.9);
++  backdrop-filter: blur(4px);
++  color: #ffffff;
++  padding: 3px 6px;
++  border-radius: 4px;
++  font-size: 9px;
++  font-weight: 600;
++  white-space: nowrap;
++  z-index: 100;
++  opacity: 0;
++  transition: opacity 0.15s ease, transform 0.15s ease;
++  pointer-events: none;
++  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
++}
++
++.participant-wrapper:hover .participant-tooltip-bubble {
++  visibility: visible;
++  opacity: 1;
++  transform: translateX(-50%) translateY(0);
+ }
+ 
+ .upcoming-header {
+@@ -1065,7 +1149,596 @@ input:checked + .slider:before {
+ }
+ 
+ /* Hover action for add button inside cell */
++.cell-add-btn {
++  opacity: 0;
++  transition: opacity 0.25s ease-in-out;
++}
++
+ .day-cell:hover .cell-add-btn {
+   opacity: 1 !important;
+ }
+ 
++/* Custom Calendar Select Button (Looks like text) */
++.calendar-select-btn {
++  font-size: 18px;
++  font-weight: 700;
++  padding: 4px 8px;
++  border-radius: 6px;
++  border: 1px solid transparent;
++  background-color: transparent;
++  cursor: pointer;
++  color: var(--text-main, #0f172a);
++  font-family: inherit;
++  outline: none;
++  transition: all 0.12s ease-in-out;
++  line-height: 1.5;
++  display: inline-block;
++}
++
++.calendar-select-btn:hover {
++  background-color: #f1f5f9;
++}
++
++/* Custom Dropdown Backdrop */
++.dropdown-backdrop {
++  position: fixed;
++  top: 0;
++  left: 0;
++  right: 0;
++  bottom: 0;
++  z-index: 998;
++  background-color: transparent;
++  cursor: default;
++}
++
++/* Custom Dropdown Menu Container */
++.custom-dropdown-menu {
++  position: absolute;
++  top: 100%;
++  left: 0;
++  margin-top: 6px;
++  background-color: #ffffff;
++  border: 1px solid rgba(0, 0, 0, 0.06);
++  border-radius: 12px;
++  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.06);
++  z-index: 999;
++  max-height: 260px;
++  overflow-y: auto;
++  min-width: 90px;
++  padding: 6px;
++  display: flex;
++  flex-direction: column;
++  gap: 2px;
++}
++
++.custom-dropdown-menu.year-menu {
++  min-width: 95px;
++}
++
++.custom-dropdown-menu.month-menu {
++  min-width: 80px;
++}
++
++/* Scrollbar styling for dropdown */
++.custom-dropdown-menu::-webkit-scrollbar {
++  width: 6px;
++}
++.custom-dropdown-menu::-webkit-scrollbar-track {
++  background: transparent;
++}
++.custom-dropdown-menu::-webkit-scrollbar-thumb {
++  background-color: #cbd5e1;
++  border-radius: 3px;
++}
++.custom-dropdown-menu::-webkit-scrollbar-thumb:hover {
++  background-color: #94a3b8;
++}
++
++/* Dropdown Menu Item */
++.dropdown-item {
++  padding: 7px 12px;
++  font-size: 14px;
++  font-weight: 600;
++  color: #334155;
++  border-radius: 6px;
++  cursor: pointer;
++  transition: all 0.1s ease;
++  text-align: center;
++}
++
++.dropdown-item:hover {
++  background-color: #f1f5f9;
++  color: #0f172a;
++}
++
++.dropdown-item.active {
++  background-color: var(--primary, #3b82f6);
++  color: #ffffff;
++  font-weight: 700;
++}
++
++/* Resizable right sidebar handler */
++.resize-handle-v {
++  position: absolute;
++  top: 0;
++  bottom: 0;
++  left: 0;
++  right: auto;
++  width: 6px;
++  cursor: col-resize;
++  z-index: 100;
++  background-color: transparent;
++  transition: all 0.2s ease;
++}
++
++.resize-handle-v::after {
++  content: '';
++  position: absolute;
++  left: 2px;
++  right: auto;
++  top: 0;
++  bottom: 0;
++  width: 2px;
++  background-color: transparent;
++  transition: all 0.2s ease;
++}
++
++.resize-handle-v:hover::after,
++.resize-handle-v.dragging::after {
++  background-color: var(--primary);
++  width: 3px;
++  box-shadow: 0 0 8px var(--primary);
++}
++
++body.dragging-active {
++  cursor: col-resize !important;
++  user-select: none !important;
++}
++
++/* Premium Sharing Settings Panel Styles */
++/* Two-column layout for Sharing Card */
++.sharing-card-layout {
++  display: grid;
++  grid-template-columns: 1fr 1.25fr;
++  gap: 24px;
++  margin-top: 4px;
++}
++
++@media (max-width: 950px) {
++  .sharing-card-layout {
++    grid-template-columns: 1fr;
++    gap: 20px;
++  }
++}
++
++.sharing-card-left {
++  display: flex;
++  flex-direction: column;
++  gap: 16px;
++}
++
++.sharing-card-right {
++  display: flex;
++  flex-direction: column;
++  gap: 12px;
++  border-left: 1px solid var(--border-color);
++  padding-left: 24px;
++}
++
++@media (max-width: 950px) {
++  .sharing-card-right {
++    border-left: none;
++    padding-left: 0;
++    border-top: 1px solid var(--border-color);
++    padding-top: 20px;
++  }
++}
++
++.sharing-sub-section {
++  display: flex;
++  flex-direction: column;
++  gap: 12px;
++  background-color: #ffffff;
++  border: 1px solid var(--border-color);
++  border-radius: var(--radius-md);
++  padding: 16px;
++}
++
++.sharing-sub-title {
++  font-size: 12px;
++  font-weight: 700;
++  color: var(--text-main);
++  border-bottom: 1px solid #f1f5f9;
++  padding-bottom: 8px;
++  margin-bottom: 4px;
++  display: flex;
++  align-items: center;
++  gap: 6px;
++}
++
++.sharing-toggle-row {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  padding: 10px 14px;
++  background-color: var(--bg-app);
++  border-radius: var(--radius-md);
++  border: 1px solid var(--border-color);
++  margin-bottom: 4px;
++}
++
++.sharing-search-container {
++  display: flex;
++  gap: 8px;
++  margin-bottom: 8px;
++  align-items: center;
++}
++
++.sharing-search-input-wrapper {
++  position: relative;
++  flex: 1.5;
++}
++
++.sharing-search-icon {
++  position: absolute;
++  left: 8px;
++  top: 50%;
++  transform: translateY(-50%);
++  color: var(--text-muted);
++  pointer-events: none;
++}
++
++.sharing-search-input {
++  width: 100%;
++  padding: 6px 8px 6px 28px;
++  font-size: 12px;
++  height: 32px;
++  border-radius: var(--radius-md);
++  border: 1px solid var(--border-color);
++  background-color: #ffffff;
++  outline: none;
++  transition: border-color 0.2s, box-shadow 0.2s;
++}
++
++.sharing-search-input:focus {
++  border-color: var(--primary);
++  box-shadow: 0 0 0 3px var(--primary-light);
++}
++
++.sharing-filter-select {
++  flex: 1;
++  height: 32px;
++  padding: 0 8px;
++  font-size: 12px;
++  border-radius: var(--radius-md);
++  border: 1px solid var(--border-color);
++  background-color: #ffffff;
++  outline: none;
++  font-weight: 500;
++  color: var(--text-main);
++  cursor: pointer;
++  transition: border-color 0.2s;
++}
++
++.sharing-filter-select:hover {
++  border-color: #cbd5e1;
++}
++
++.sharing-partners-list {
++  display: flex;
++  flex-direction: column;
++  gap: 8px;
++  max-height: 280px;
++  overflow-y: auto;
++  padding-right: 4px;
++  margin-bottom: 8px;
++}
++
++.sharing-partner-row {
++  display: flex;
++  justify-content: space-between;
++  align-items: center;
++  padding: 8px 12px;
++  border-radius: var(--radius-md);
++  background-color: #ffffff;
++  border: 1px solid #f1f5f9;
++  gap: 8px;
++  transition: all 0.2s ease;
++  cursor: pointer;
++}
++
++.sharing-partner-row:hover {
++  border-color: #cbd5e1;
++  box-shadow: var(--shadow-sm);
++  background-color: #fafafa;
++}
++
++.sharing-partner-row.active-perspective {
++  background-color: #ecfdf5;
++  border-color: #10b981;
++  border-left: 4px solid #10b981;
++  border-top-left-radius: 3px;
++  border-bottom-left-radius: 3px;
++  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.1);
++}
++
++.sharing-partner-info {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  flex: 1;
++  user-select: none;
++}
++
++.sharing-partner-avatar {
++  width: 24px;
++  height: 24px;
++  border-radius: 50%;
++  background-color: #cbd5e1;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  font-size: 10px;
++  font-weight: 700;
++  color: #1e293b;
++  border: 1px solid rgba(0, 0, 0, 0.05);
++  overflow: hidden;
++  flex-shrink: 0;
++}
++
++.active-perspective .sharing-partner-avatar {
++  background-color: #dcfce7;
++  color: #15803d;
++  border-color: #10b981;
++}
++
++.sharing-partner-name-group {
++  font-weight: 600;
++  color: var(--text-main);
++  display: flex;
++  align-items: center;
++  gap: 6px;
++  font-size: 12px;
++}
++
++.sharing-partner-group-badge {
++  color: var(--text-muted);
++  font-weight: 400;
++  font-size: 11px;
++  background-color: #f1f5f9;
++  padding: 1px 6px;
++  border-radius: 10px;
++}
++
++.active-perspective .sharing-partner-group-badge {
++  background-color: #dcfce7;
++  color: #15803d;
++}
++
++.perspective-active-badge {
++  font-size: 9px;
++  color: #ffffff;
++  font-weight: 700;
++  background-color: #10b981;
++  padding: 2px 6px;
++  border-radius: 12px;
++  letter-spacing: -0.2px;
++  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
++}
++
++.sharing-partner-privilege-select {
++  padding: 4px 8px;
++  font-size: 11px;
++  border-radius: var(--radius-md);
++  border: 1px solid #e2e8f0;
++  font-weight: 600;
++  background-color: #ffffff;
++  outline: none;
++  cursor: pointer;
++  transition: all 0.2s;
++}
++
++.sharing-partner-privilege-select.read-only {
++  color: #2563eb;
++  border-color: #dbeafe;
++  background-color: #eff6ff;
++}
++
++.sharing-partner-privilege-select.read-only:hover {
++  border-color: #bfdbfe;
++}
++
++.sharing-partner-privilege-select.edit-allow {
++  color: #ea580c;
++  border-color: #ffedd5;
++  background-color: #fff7ed;
++}
++
++.sharing-partner-privilege-select.edit-allow:hover {
++  border-color: #fed7aa;
++}
++
++.sharing-partner-delete-btn {
++  border: none;
++  background: none;
++  color: var(--text-muted);
++  cursor: pointer;
++  padding: 4px;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  border-radius: 4px;
++  transition: all 0.2s;
++}
++
++.sharing-partner-delete-btn:hover {
++  color: #ef4444;
++  background-color: #fee2e2;
++}
++
++/* Sharing Add Form */
++.sharing-add-form {
++  display: flex;
++  flex-direction: column;
++  gap: 8px;
++  background-color: var(--bg-app);
++  border: 1px solid var(--border-color);
++  border-radius: var(--radius-md);
++  padding: 12px;
++  margin-top: 8px;
++}
++
++.sharing-add-grid {
++  display: grid;
++  grid-template-columns: 1.5fr 1fr 1fr;
++  gap: 6px;
++}
++
++.sharing-add-input {
++  height: 32px;
++  padding: 0 10px;
++  font-size: 12px;
++  border-radius: var(--radius-md);
++  border: 1px solid var(--border-color);
++  background-color: #ffffff;
++  outline: none;
++  transition: border-color 0.2s;
++}
++
++.sharing-add-input:focus {
++  border-color: var(--primary);
++}
++
++.sharing-add-select {
++  height: 32px;
++  padding: 0 6px;
++  font-size: 12px;
++  border-radius: var(--radius-md);
++  border: 1px solid var(--border-color);
++  background-color: #ffffff;
++  outline: none;
++  cursor: pointer;
++  color: var(--text-main);
++  transition: border-color 0.2s;
++}
++
++.sharing-add-select:hover {
++  border-color: #cbd5e1;
++}
++
++.sharing-add-btn {
++  height: 32px;
++  font-size: 12px;
++  font-weight: 600;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  gap: 6px;
++  border-radius: var(--radius-md);
++  cursor: pointer;
++  background-color: var(--primary);
++  color: #ffffff;
++  border: none;
++  transition: background-color 0.2s, transform 0.1s;
++}
++
++.sharing-add-btn:hover {
++  background-color: var(--primary-hover);
++}
++
++.sharing-add-btn:active {
++  transform: scale(0.98);
++}
++
++/* Group management */
++.sharing-group-container {
++  margin-top: 12px;
++  border-top: 1px solid var(--border-color);
++  padding-top: 12px;
++  display: flex;
++  flex-direction: column;
++  gap: 8px;
++}
++
++.sharing-group-title {
++  font-size: 12px;
++  font-weight: 700;
++  color: var(--text-main);
++}
++
++.sharing-group-badge-list {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 6px;
++}
++
++.sharing-group-badge {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  font-size: 11px;
++  background-color: #f1f5f9;
++  color: #475569;
++  border: 1px solid #e2e8f0;
++  padding: 4px 10px;
++  border-radius: 16px;
++  font-weight: 500;
++  transition: all 0.2s;
++}
++
++.sharing-group-badge:hover {
++  background-color: #e2e8f0;
++  color: #1e293b;
++}
++
++.sharing-group-delete-btn {
++  border: none;
++  background: none;
++  color: #94a3b8;
++  cursor: pointer;
++  padding: 0;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  transition: color 0.2s;
++}
++
++.sharing-group-delete-btn:hover {
++  color: #ef4444;
++}
++
++.sharing-group-add-row {
++  display: flex;
++  gap: 6px;
++  margin-top: 4px;
++}
++
++.sharing-group-add-input {
++  flex: 1;
++  height: 30px;
++  padding: 0 10px;
++  font-size: 11px;
++  border-radius: var(--radius-md);
++  border: 1px solid var(--border-color);
++  background-color: #ffffff;
++  outline: none;
++}
++
++.sharing-group-add-btn {
++  height: 30px;
++  padding: 0 12px;
++  font-size: 11px;
++  font-weight: 600;
++  border-radius: var(--radius-md);
++  background-color: #f1f5f9;
++  border: 1px solid #cbd5e1;
++  color: #475569;
++  cursor: pointer;
++  transition: all 0.2s;
++}
++
++.sharing-group-add-btn:hover {
++  background-color: #e2e8f0;
++  color: #1e293b;
++}
++

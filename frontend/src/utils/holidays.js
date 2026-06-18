@@ -50,6 +50,7 @@ const HOLIDAYS_DATA = {
   "2026-05-05": { name: "어린이날" },
   "2026-05-24": { name: "부처님오신날" },
   "2026-05-25": { name: "대체공휴일", isAlternative: true },
+  "2026-06-03": { name: "제9회 전국동시지방선거" },
   "2026-06-06": { name: "현충일" },
   "2026-08-15": { name: "광복절" },
   "2026-09-24": { name: "추석 연휴" },
@@ -86,45 +87,107 @@ export function isOffDay(dateStr) {
 export async function fetchHolidays(year, month) {
   const apiKey = import.meta.env.VITE_HOLIDAY_API_KEY;
   const formattedMonth = String(month).padStart(2, '0');
+  const cacheKey = `weplan_holidays_cache_${year}_${formattedMonth}`;
+
+  // Helper to save holidays to localStorage
+  const cacheHolidays = (data) => {
+    try {
+      localStorage.setItem(cacheKey, JSON.stringify({
+        timestamp: Date.now(),
+        data
+      }));
+    } catch (e) {
+      console.warn("Failed to cache holidays in localStorage:", e);
+    }
+  };
+
+  // Helper to load holidays from localStorage cache
+  const getCachedHolidays = () => {
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return parsed.data || null;
+      }
+    } catch (e) {
+      console.warn("Failed to load cached holidays from localStorage:", e);
+    }
+    return null;
+  };
   
-  // If the key is the default placeholder, return local fallback immediately
-  if (!apiKey || apiKey === "YOUR_PUBLIC_DATA_PORTAL_API_KEY_HERE") {
-    console.warn("VITE_HOLIDAY_API_KEY is not configured in .env. Using local holiday database.");
-    return getLocalHolidaysForMonth(year, month);
+  // 1. If Public Data Portal API Key is configured, prioritize official API call
+  if (apiKey && apiKey !== "YOUR_PUBLIC_DATA_PORTAL_API_KEY_HERE") {
+    const url = `https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getHoliDeInfo?serviceKey=${encodeURIComponent(apiKey)}&solYear=${year}&solMonth=${formattedMonth}&_type=json&numOfRows=50`;
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        const holidays = {};
+        const items = data?.response?.body?.items?.item;
+        if (items) {
+          const itemsList = Array.isArray(items) ? items : [items];
+          itemsList.forEach(item => {
+            if (item.isHoliday === 'Y') {
+              const locdateStr = String(item.locdate);
+              const y = locdateStr.substring(0, 4);
+              const m = locdateStr.substring(4, 6);
+              const d = locdateStr.substring(6, 8);
+              const formattedDate = `${y}-${m}-${d}`;
+              const name = item.dateName || '';
+              const isAlternative = name.includes('대체공휴일') || name.includes('대체 공휴일');
+              holidays[formattedDate] = { name, isAlternative };
+            }
+          });
+          cacheHolidays(holidays);
+          return holidays;
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to fetch holidays from Public Data Portal API for ${year}-${formattedMonth}:`, error);
+    }
   }
 
-  // URL for getHoliDeInfo (Public holidays info)
-  const url = `https://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService/getHoliDeInfo?serviceKey=${encodeURIComponent(apiKey)}&solYear=${year}&solMonth=${formattedMonth}&_type=json&numOfRows=50`;
-
+  // 2. Query Nager.Date public API
   try {
-    const response = await fetch(url);
+    const openApiUrl = `https://date.nager.at/api/v3/PublicHolidays/${year}/KR`;
+    const response = await fetch(openApiUrl);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const data = await response.json();
     const holidays = {};
-    const items = data?.response?.body?.items?.item;
 
-    if (items) {
-      // If there is only one holiday, data.response.body.items.item is an object.
-      // If there are multiple, it is an array.
-      const itemsList = Array.isArray(items) ? items : [items];
-      itemsList.forEach(item => {
-        if (item.isHoliday === 'Y') {
-          const locdateStr = String(item.locdate); // e.g. 20240505
-          const y = locdateStr.substring(0, 4);
-          const m = locdateStr.substring(4, 6);
-          const d = locdateStr.substring(6, 8);
-          const formattedDate = `${y}-${m}-${d}`;
-          holidays[formattedDate] = { name: item.dateName };
+    // Load local database holidays for this month first (to ensure local elections etc. are kept)
+    const localHolidays = getLocalHolidaysForMonth(year, month);
+    Object.assign(holidays, localHolidays);
+
+    // Merge in Nager.Date holidays for the matching month
+    if (Array.isArray(data)) {
+      data.forEach(item => {
+        if (item.date) {
+          const [y, m, d] = item.date.split('-');
+          if (parseInt(y, 10) === year && parseInt(m, 10) === month) {
+            const name = item.localName || item.name;
+            const isAlternative = name.includes('대체') || name.includes('대체공휴일') || name.includes('Alternative');
+            if (!holidays[item.date]) {
+              holidays[item.date] = { name, isAlternative };
+            }
+          }
         }
       });
-      return holidays;
     }
-    return {};
+    cacheHolidays(holidays);
+    return holidays;
   } catch (error) {
-    console.error(`Failed to fetch holidays from Public Data Portal API for ${year}-${formattedMonth}:`, error);
-    console.warn("Using local holiday database fallback.");
+    console.warn("Failed to fetch holidays from public Nager.Date API. Checking local cache:", error.message);
+    
+    // 3. Fallback to localStorage cache if network is down or API fails
+    const cached = getCachedHolidays();
+    if (cached) {
+      return cached;
+    }
+    
+    // 4. Ultimate fallback to purely local database if no cache is available
     return getLocalHolidaysForMonth(year, month);
   }
 }

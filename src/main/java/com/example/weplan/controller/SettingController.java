@@ -24,10 +24,11 @@ public class SettingController {
                     .eventAlarmTime("전날 18:00")
                     .enableRepeatAlarm(true)
                     .excludeHolidays(true)
+                    .showHolidayCalendar(true)
                     .showKoreanHolidays(true)
                     .showAlternativeHolidays(true)
                     .showLunarAnniversaries(true)
-                    .showMyAnniversaries(false)
+                    .showMyAnniversaries(true)
                     .workViewMode("badge")
                     .aptViewMode("dot")
                     .build();
@@ -35,9 +36,4 @@ public class SettingController {
         });
     }
 
-    @PostMapping
-    public UserSetting saveSettings(@RequestBody UserSetting settings) {
-        settings.setId("default");
-        return repository.save(settings);
-    }
 }

@@ -1,0 +1,1260 @@
+diff --git a/frontend/src/App.jsx b/frontend/src/App.jsx
+index 2f1a4eb..20112b2 100644
+--- a/frontend/src/App.jsx
++++ b/frontend/src/App.jsx
+@@ -3,6 +3,7 @@ import SidebarLeft from './components/SidebarLeft';
+ import CalendarGrid from './components/CalendarGrid';
+ import SidebarRight from './components/SidebarRight';
+ import SettingsPanels from './components/SettingsPanels';
++import StatsPanel from './components/StatsPanel';
+ import { 
+   Plus, 
+   Trash2, 
+@@ -155,15 +156,17 @@ export default function App() {
+       } catch (e) {}
+     }
+     return {
++      showHolidayCalendar: true,
+       showKoreanHolidays: true,
+       showAlternativeHolidays: true,
+       showLunarAnniversaries: true,
+-      showMyAnniversaries: false
++      showMyAnniversaries: true
+     };
+   });
+ 
+   // UI Control states
+   const [currentTab, setCurrentTab] = useState('calendar');
++  const [mobileTab, setMobileTab] = useState('calendar');
+   const [currentDate, setCurrentDate] = useState(new Date(2024, 4, 15)); // Default to May 2024
+   const [viewMode, setViewMode] = useState('month'); // month, week, day, list
+   
+@@ -186,6 +189,12 @@ export default function App() {
+   const [formTripStart, setFormTripStart] = useState('');
+   const [formTripEnd, setFormTripEnd] = useState('');
+   const [formTripColor, setFormTripColor] = useState('blue');
++  const [formAptDisplayMode, setFormAptDisplayMode] = useState('dot'); // 'dot' or 'box'
++  const [calendarPerspective, setCalendarPerspective] = useState('me'); // 'me' | sharedUser.id
++  const [formShareScope, setFormShareScope] = useState('public'); // 'public' | 'private' | 'custom'
++  const [formSharedWithIds, setFormSharedWithIds] = useState([]); // array of sharedUser IDs
++  const [formInlineShareName, setFormInlineShareName] = useState('');
++  const [formInlineShareRelation, setFormInlineShareRelation] = useState('친구');
+ 
+   // Mobile Simulator state
+   const [mobileScreen, setMobileScreen] = useState('calendar'); // calendar, detail
+@@ -247,10 +256,11 @@ export default function App() {
+         eventAlarmTime: '전날 18:00',
+         enableRepeatAlarm: true,
+         excludeHolidays: true,
++        showHolidayCalendar: true,
+         showKoreanHolidays: true,
+         showAlternativeHolidays: true,
+         showLunarAnniversaries: true,
+-        showMyAnniversaries: false,
++        showMyAnniversaries: true,
+         workViewMode: 'badge',
+         aptViewMode: 'dot'
+       });
+@@ -265,6 +275,7 @@ export default function App() {
+         excludeHolidays: settingsData.excludeHolidays
+       });
+       setSettings({
++        showHolidayCalendar: settingsData.showHolidayCalendar !== false,
+         showKoreanHolidays: settingsData.showKoreanHolidays,
+         showAlternativeHolidays: settingsData.showAlternativeHolidays,
+         showLunarAnniversaries: settingsData.showLunarAnniversaries,
+@@ -349,6 +360,7 @@ export default function App() {
+       eventAlarmTime: alarmSettings.eventAlarmTime,
+       enableRepeatAlarm: alarmSettings.enableRepeatAlarm,
+       excludeHolidays: alarmSettings.excludeHolidays,
++      showHolidayCalendar: settings.showHolidayCalendar,
+       showKoreanHolidays: settings.showKoreanHolidays,
+       showAlternativeHolidays: settings.showAlternativeHolidays,
+       showLunarAnniversaries: settings.showLunarAnniversaries,
+@@ -358,6 +370,25 @@ export default function App() {
+     });
+   }, [dataLoaded, userName, userJob, isPrivateMode, alarmSettings, settings, workViewMode, aptViewMode]);
+ 
++  // Scroll to selected settings card when tab changes (keeps calendar on screen)
++  useEffect(() => {
++    if (currentTab && currentTab !== 'calendar' && currentTab !== 'stats') {
++      const idMap = {
++        settings: 'card-holiday',
++        schedule: 'card-schedule',
++        alarm: 'card-alarm',
++        shared: 'card-shared',
++        records: 'card-birthday'
++      };
++      const element = document.getElementById(idMap[currentTab]);
++      if (element) {
++        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
++      }
++    } else if (currentTab === 'calendar') {
++      window.scrollTo({ top: 0, behavior: 'smooth' });
++    }
++  }, [currentTab]);
++
+   useEffect(() => {
+     localStorage.setItem('weplan_shifts', JSON.stringify(shifts));
+     if (!dataLoaded) return;
+@@ -414,6 +445,28 @@ export default function App() {
+     }));
+   };
+ 
++  const handleAddInlineShareTarget = () => {
++    if (!formInlineShareName.trim()) return;
++    const relationEmoji = formInlineShareRelation === '연인' ? ' ❤️' : (formInlineShareRelation === '가족' ? ' 🏠' : ' 👭');
++    const newId = Date.now().toString();
++    const newTarget = {
++      id: newId,
++      name: formInlineShareName,
++      relation: formInlineShareRelation + relationEmoji,
++      avatar: '',
++      privilege: '보기 가능',
++      isSharing: true
++    };
++    
++    const updatedUsers = [...sharedUsers, newTarget];
++    setSharedUsers(updatedUsers);
++    localStorage.setItem('weplan_shared_users', JSON.stringify(updatedUsers));
++    
++    setFormShareScope('custom');
++    setFormSharedWithIds(prev => [...prev, newId]);
++    setFormInlineShareName('');
++  };
++
+   // Add Event trigger
+   const handleOpenAddModal = (dateStr) => {
+     setSelectedDay(dateStr);
+@@ -428,6 +481,9 @@ export default function App() {
+     setFormTripStart(dateStr);
+     setFormTripEnd(dateStr);
+     setFormTripColor('blue');
++    setFormAptDisplayMode('dot');
++    setFormShareScope('public');
++    setFormSharedWithIds(sharedUsers.map(u => u.id));
+     setShowAddModal(true);
+   };
+ 
+@@ -452,12 +508,17 @@ export default function App() {
+       setFormIsRange(false);
+       setFormTripStart(evt.date || selectedDay);
+       setFormTripEnd(evt.date || selectedDay);
+-      setFormTripColor('blue');
++      setFormTripColor(evt.color || 'blue');
+       setFormAptTitle(evt.title || '');
+       setFormAptTime(evt.time || '12:00');
+       setFormAptPlace(evt.place || '');
+       setFormAptIsPrivate(evt.isPrivate || false);
++      setFormAptDisplayMode(evt.displayMode || 'dot');
+     }
++    const scope = evt.shareScope || (evt.isPrivate ? 'private' : 'public');
++    const sharedWith = evt.sharedWith || (evt.isPrivate ? [] : sharedUsers.map(u => u.id));
++    setFormShareScope(scope);
++    setFormSharedWithIds(sharedWith);
+     setShowAddModal(true);
+   };
+ 
+@@ -486,7 +547,10 @@ export default function App() {
+               endDate: formTripEnd,
+               place: formAptPlace,
+               color: formTripColor,
+-              date: undefined
++              date: undefined,
++              shareScope: formShareScope,
++              sharedWith: formSharedWithIds,
++              isPrivate: formShareScope === 'private'
+             };
+           } else {
+             return { 
+@@ -495,10 +559,14 @@ export default function App() {
+               title: formAptTitle, 
+               time: formAptTime, 
+               place: formAptPlace,
+-              isPrivate: formAptIsPrivate,
++              isPrivate: formShareScope === 'private',
++              displayMode: formAptDisplayMode,
+               date: editTarget.date || selectedDay,
+               startDate: undefined,
+-              endDate: undefined
++              endDate: undefined,
++              shareScope: formShareScope,
++              sharedWith: formSharedWithIds,
++              color: formTripColor
+             };
+           }
+         }
+@@ -523,13 +591,20 @@ export default function App() {
+         newEvent.endDate = formTripEnd;
+         newEvent.place = formAptPlace;
+         newEvent.color = formTripColor;
++        newEvent.shareScope = formShareScope;
++        newEvent.sharedWith = formSharedWithIds;
++        newEvent.isPrivate = formShareScope === 'private';
+       } else {
+         newEvent.type = 'appointment';
+         newEvent.date = selectedDay;
+         newEvent.title = formAptTitle;
+         newEvent.time = formAptTime;
+         newEvent.place = formAptPlace;
+-        newEvent.isPrivate = formAptIsPrivate;
++        newEvent.isPrivate = formShareScope === 'private';
++        newEvent.displayMode = formAptDisplayMode;
++        newEvent.shareScope = formShareScope;
++        newEvent.sharedWith = formSharedWithIds;
++        newEvent.color = formTripColor;
+       }
+       setEvents(prev => [...prev, newEvent]);
+     }
+@@ -576,11 +651,10 @@ export default function App() {
+     }
+   };
+ 
+-  // Trips data
+   const currentTrips = events.filter(e => e.type === 'trip');
+-
+-  // Filter regular appointments for mock details on mobile simulator
+   const activeApt = events.find(e => e.id === 'apt-3') || INITIAL_EVENTS[2];
++  const selectedPerspectiveUser = sharedUsers.find(u => u.id === calendarPerspective);
++  const isReadOnlyPerspective = calendarPerspective !== 'me' && (!selectedPerspectiveUser || !selectedPerspectiveUser.privilege.includes('편집'));
+ 
+   return (
+     <div className="app-container">
+@@ -595,62 +669,12 @@ export default function App() {
+         setUserName={setUserName}
+         userJob={userJob}
+         setUserJob={setUserJob}
++        calendarPerspective={calendarPerspective}
++        setCalendarPerspective={setCalendarPerspective}
+       />
+ 
+       {/* 2. Main Center Body */}
+       <main className="main-content">
+-        <div style={{ padding: '10px', backgroundColor: '#fee2e2', color: '#991b1b', borderRadius: '8px', fontSize: '11px', whiteSpace: 'pre-wrap', maxHeight: '150px', overflowY: 'auto', marginBottom: '10px' }}>
+-          <strong>[Debug Events]</strong> {JSON.stringify(events.map(e => ({ id: e.id, type: e.type, title: e.title || e.name, date: e.date, startDate: e.startDate, endDate: e.endDate })), null, 2)}
+-        </div>
+-        
+-        {/* Style View Customizer (Wow/Premium control banner) */}
+-        <div style={{
+-          display: 'flex',
+-          justifyContent: 'space-between',
+-          alignItems: 'center',
+-          backgroundColor: '#ffffff',
+-          padding: '12px 20px',
+-          borderRadius: 'var(--radius-lg)',
+-          boxShadow: 'var(--shadow-sm)',
+-          borderLeft: '4px solid var(--primary)'
+-        }}>
+-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+-            <Layers size={18} color="var(--primary)" />
+-            <span style={{ fontSize: '14px', fontWeight: '700' }}>캘린더 시각 요소 맞춤설정</span>
+-          </div>
+-
+-          <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+-            {/* Appointment style */}
+-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+-              <span style={{ fontSize: '12px', fontWeight: '500', color: 'var(--text-muted)' }}>약속 표시 형태:</span>
+-              <div className="header-view-toggle" style={{ margin: 0, padding: '2px' }}>
+-                <button 
+-                  onClick={() => setAptViewMode('dot')} 
+-                  className={`view-toggle-btn ${aptViewMode === 'dot' ? 'active' : ''}`}
+-                  style={{ padding: '4px 10px', fontSize: '11px' }}
+-                >
+-                  원 (점)
+-                </button>
+-                <button 
+-                  onClick={() => setAptViewMode('box')} 
+-                  className={`view-toggle-btn ${aptViewMode === 'box' ? 'active' : ''}`}
+-                  style={{ padding: '4px 10px', fontSize: '11px' }}
+-                >
+-                  네모 상자
+-                </button>
+-                <button 
+-                  onClick={() => setAptViewMode('both')} 
+-                  className={`view-toggle-btn ${aptViewMode === 'both' ? 'active' : ''}`}
+-                  style={{ padding: '4px 10px', fontSize: '11px' }}
+-                >
+-                  원 + 네모
+-                </button>
+-              </div>
+-            </div>
+-          </div>
+-        </div>
+-
+-        {/* Calendar Grid component */}
+         <CalendarGrid 
+           currentDate={currentDate}
+           setCurrentDate={setCurrentDate}
+@@ -662,14 +686,23 @@ export default function App() {
+           workViewMode={workViewMode}
+           aptViewMode={aptViewMode}
+           onMoveEvent={handleMoveEvent}
+-          onSelectDay={setSelectedDay}
++          onSelectDay={(dateStr) => {
++            setSelectedDay(dateStr);
++            const parts = dateStr.split('-');
++            setCurrentDate(new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)));
++          }}
+           selectedDay={selectedDay}
+           onAddEventClick={handleOpenAddModal}
++          onEditEvent={handleEditEvent}
+           isPrivateMode={isPrivateMode}
+           holidaysMap={holidaysMap}
++          calendarPerspective={calendarPerspective}
++          setCalendarPerspective={setCalendarPerspective}
++          sharedUsers={sharedUsers}
++          isReadOnlyPerspective={isReadOnlyPerspective}
+         />
+ 
+-        {/* Bottom Configuration Panels */}
++        {/* Bottom Configuration Panels (Always displayed here, scrolling occurs when sidebar tabs are clicked) */}
+         <SettingsPanels 
+           shifts={shifts}
+           setShifts={setShifts}
+@@ -682,9 +715,7 @@ export default function App() {
+           isPrivateMode={isPrivateMode}
+           setIsPrivateMode={setIsPrivateMode}
+           onAddBirthday={handleAddBirthday}
+-          onAddTripConnection={handleAddTripConnection}
+-          trips={currentTrips}
+-          onDisconnectTrip={handleDisconnectTrip}
++          currentTab="settings"
+         />
+ 
+         {/* Mobile Mockup Simulator title */}
+@@ -704,214 +735,347 @@ export default function App() {
+           <div className="phone-container">
+             <div className="phone-header">
+               <span>9:41</span>
+-              <span style={{ fontSize: '11px' }}>2024년 5월 ▾</span>
++              {mobileTab === 'calendar' ? (
++                <span style={{ fontSize: '11px' }}>2024년 5월 ▾</span>
++              ) : mobileTab === 'events' ? (
++                <span style={{ fontSize: '11px', fontWeight: '700' }}>내 일정</span>
++              ) : mobileTab === 'alarm' ? (
++                <span style={{ fontSize: '11px', fontWeight: '700' }}>알림</span>
++              ) : mobileTab === 'shared' ? (
++                <span style={{ fontSize: '11px', fontWeight: '700' }}>공유</span>
++              ) : (
++                <span style={{ fontSize: '11px', fontWeight: '700' }}>설정</span>
++              )}
+               <span>🔋 📶</span>
+             </div>
+             
+-            <div className="phone-screen" style={{ backgroundColor: '#f8fafc' }}>
+-              <div className="phone-body">
+-                {/* Mobile Shift header */}
+-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', flexWrap: 'wrap', gap: '4px' }}>
+-                  {Array.isArray(shifts) && shifts.map(s => (
+-                    <span key={s.id} className="legend-badge" style={{ backgroundColor: s.color + '20', color: s.color }}>{s.label}</span>
+-                  ))}
+-                  <span className="legend-badge" style={{ backgroundColor: 'var(--apt-bg)', color: 'var(--apt-text)' }}>약속</span>
+-                </div>
+-
+-                {/* Mobile week bar */}
+-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', textAlign: 'center', backgroundColor: '#ffffff', borderRadius: '12px', padding: '10px 4px', boxShadow: 'var(--shadow-sm)' }}>
+-                  {['일', '월', '화', '수', '목', '금', '토'].map((w, idx) => (
+-                    <span key={idx} style={{ fontSize: '11px', color: idx === 0 ? '#ef4444' : (idx === 6 ? '#3b82f6' : 'var(--text-muted)') }}>{w}</span>
+-                  ))}
+-                  {/* Mock week 12-18 */}
+-                  {[12, 13, 14, 15, 16, 17, 18].map(day => (
+-                    <span key={day} style={{ 
+-                      fontSize: '13px', 
+-                      fontWeight: '700', 
+-                      marginTop: '6px',
+-                      padding: '4px',
+-                      borderRadius: '50%',
+-                      backgroundColor: day === 15 ? 'var(--primary)' : 'transparent',
+-                      color: day === 15 ? '#ffffff' : 'inherit'
+-                    }}>
+-                      {day}
+-                    </span>
+-                  ))}
+-                </div>
+-
+-                {/* Mobile daily timeline (May 15) */}
+-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+-                  <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>07:00</div>
+-                  {shifts[0] && (
+-                    <div style={{ 
+-                      backgroundColor: shifts[0].color + '15', 
+-                      color: shifts[0].color, 
+-                      padding: '10px 14px', 
+-                      borderRadius: '12px', 
+-                      borderLeft: `4px solid ${shifts[0].color}` 
+-                    }}>
+-                      <div style={{ fontWeight: '700', fontSize: '13px' }}>{shifts[0].label} 근무</div>
+-                      <span style={{ fontSize: '11px' }}>{shifts[0].start} - {shifts[0].end} (지정 근무)</span>
++            <div className="phone-screen" style={{ backgroundColor: '#f8fafc', height: '420px', overflowY: 'auto' }}>
++              <div className="phone-body" style={{ height: '100%' }}>
++                {mobileTab === 'calendar' && (
++                  <>
++                    {/* Mobile Shift header */}
++                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', flexWrap: 'wrap', gap: '4px' }}>
++                      {Array.isArray(shifts) && shifts.map(s => (
++                        <span key={s.id} className="legend-badge" style={{ backgroundColor: s.color + '20', color: s.color }}>{s.label}</span>
++                      ))}
++                      <span className="legend-badge" style={{ backgroundColor: 'var(--apt-bg)', color: 'var(--apt-text)' }}>약속</span>
+                     </div>
+-                  )}
+ 
+-                  <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', marginTop: '8px' }}>12:30</div>
+-                  <div style={{ backgroundColor: 'var(--apt-bg)', color: 'var(--apt-text)', padding: '10px 14px', borderRadius: '12px', borderLeft: '4px solid var(--apt-dot)' }}>
+-                    <div style={{ fontWeight: '700', fontSize: '13px' }}>친구랑 점심</div>
+-                    <span style={{ fontSize: '11px' }}>12:30 - 13:30 @ 강남역 맛집</span>
+-                  </div>
++                    {/* Mobile week bar */}
++                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', textAlign: 'center', backgroundColor: '#ffffff', borderRadius: '12px', padding: '10px 4px', boxShadow: 'var(--shadow-sm)' }}>
++                      {['일', '월', '화', '수', '목', '금', '토'].map((w, idx) => (
++                        <span key={idx} style={{ fontSize: '11px', color: idx === 0 ? '#ef4444' : (idx === 6 ? '#3b82f6' : 'var(--text-muted)') }}>{w}</span>
++                      ))}
++                      {/* Mock week 12-18 */}
++                      {[12, 13, 14, 15, 16, 17, 18].map(day => (
++                        <span key={day} style={{ 
++                          fontSize: '13px', 
++                          fontWeight: '700', 
++                          marginTop: '6px',
++                          padding: '4px',
++                          borderRadius: '50%',
++                          backgroundColor: day === 15 ? 'var(--primary)' : 'transparent',
++                          color: day === 15 ? '#ffffff' : 'inherit'
++                        }}>
++                          {day}
++                        </span>
++                      ))}
++                    </div>
+ 
+-                  <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', marginTop: '8px' }}>18:00</div>
+-                  <div style={{ backgroundColor: '#f1f5f9', color: '#334155', padding: '10px 14px', borderRadius: '12px' }}>
+-                    <div style={{ fontWeight: '700', fontSize: '13px' }}>헬스</div>
+-                    <span style={{ fontSize: '11px' }}>18:00 - 19:30 @ 헬스장</span>
+-                  </div>
+-                </div>
+-              </div>
+-            </div>
++                    {/* Mobile daily timeline (May 15) */}
++                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
++                      <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>07:00</div>
++                      {shifts[0] && (
++                        <div style={{ 
++                          backgroundColor: shifts[0].color + '15', 
++                          color: shifts[0].color, 
++                          padding: '10px 14px', 
++                          borderRadius: '12px', 
++                          borderLeft: `4px solid ${shifts[0].color}` 
++                        }}>
++                          <div style={{ fontWeight: '700', fontSize: '13px' }}>{shifts[0].label} 근무</div>
++                          <span style={{ fontSize: '11px' }}>{shifts[0].start} - {shifts[0].end} (지정 근무)</span>
++                        </div>
++                      )}
+ 
+-            {/* Mobile bottom navigation */}
+-            <div style={{ display: 'flex', justifyContent: 'space-around', padding: '10px 0', borderTop: '1px solid var(--border-color)', backgroundColor: '#ffffff', fontSize: '10px', color: 'var(--text-muted)' }}>
+-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'var(--primary)' }}>
+-                <span>📅</span>
+-                <span>캘린더</span>
+-              </div>
+-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+-                <span>📋</span>
+-                <span>일정</span>
+-              </div>
+-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+-                <span>🔔</span>
+-                <span>알림</span>
+-              </div>
+-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+-                <span>👥</span>
+-                <span>공유</span>
+-              </div>
+-            </div>
+-          </div>
++                      <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', marginTop: '8px' }}>12:30</div>
++                      <div style={{ backgroundColor: 'var(--apt-bg)', color: 'var(--apt-text)', padding: '10px 14px', borderRadius: '12px', borderLeft: '4px solid var(--apt-dot)' }}>
++                        <div style={{ fontWeight: '700', fontSize: '13px' }}>친구랑 점심</div>
++                        <span style={{ fontSize: '11px' }}>12:30 - 13:30 @ 강남역 맛집</span>
++                      </div>
+ 
+-          {/* Phone 2: Mobile Event Details */}
+-          <div className="phone-container">
+-            <div className="phone-header">
+-              <span>9:41</span>
+-              <span style={{ fontWeight: '700' }}>일정 상세</span>
+-              <span>🔋 📶</span>
+-            </div>
++                      <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', marginTop: '8px' }}>18:00</div>
++                      <div style={{ backgroundColor: '#f1f5f9', color: '#334155', padding: '10px 14px', borderRadius: '12px' }}>
++                        <div style={{ fontWeight: '700', fontSize: '13px' }}>헬스</div>
++                        <span style={{ fontSize: '11px' }}>18:00 - 19:30 @ 헬스장</span>
++                      </div>
++                    </div>
++                  </>
++                )}
++
++                {mobileTab === 'events' && (
++                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '4px', height: '100%' }}>
++                    <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-main)', marginBottom: '4px' }}>이번 달 일정 목록 📋</div>
++                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '320px', overflowY: 'auto' }}>
++                      {events.length === 0 ? (
++                        <div style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-muted)', padding: '20px 0' }}>등록된 일정이 없습니다.</div>
++                      ) : (
++                        events.map(event => (
++                          <div key={event.id} style={{ 
++                            backgroundColor: '#ffffff', 
++                            padding: '10px 12px', 
++                            borderRadius: '10px', 
++                            borderLeft: event.type === 'shift' ? `4px solid ${event.color || 'var(--primary)'}` : '4px solid #3b82f6',
++                            boxShadow: 'var(--shadow-sm)',
++                            display: 'flex',
++                            justifyContent: 'space-between',
++                            alignItems: 'center'
++                          }}>
++                            <div>
++                              <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>{event.title}</div>
++                              <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>{event.date || `${event.startDate} ~ ${event.endDate}`}</div>
++                            </div>
++                            {event.time && <span style={{ fontSize: '10px', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', color: '#475569' }}>{event.time}</span>}
++                          </div>
++                        ))
++                      )}
++                    </div>
++                  </div>
++                )}
++
++                {mobileTab === 'alarm' && (
++                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '4px', height: '100%' }}>
++                    <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-main)', marginBottom: '4px' }}>알림 내역 🔔</div>
++                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '320px', overflowY: 'auto' }}>
++                      <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '10px 12px', fontSize: '11px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
++                        <span style={{ fontSize: '14px' }}>🔔</span>
++                        <div>
++                          <div style={{ fontWeight: '700', color: '#1e3a8a' }}>일정 예정 알림</div>
++                          <div style={{ color: '#2563eb', marginTop: '2px' }}>내일 12:30 '친구랑 점심' 일정이 있습니다. (장소: 강남역 맛집)</div>
++                        </div>
++                      </div>
++                      <div style={{ backgroundColor: '#fdf2f8', border: '1px solid #fbcfe8', borderRadius: '10px', padding: '10px 12px', fontSize: '11px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
++                        <span style={{ fontSize: '14px' }}>🎂</span>
++                        <div>
++                          <div style={{ fontWeight: '700', color: '#9d174d' }}>생일 D-7 알림</div>
++                          <div style={{ color: '#db2777', marginTop: '2px' }}>일주일 뒤(5월 22일)는 민지님의 생일(음력)입니다.</div>
++                        </div>
++                      </div>
++                      <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '10px 12px', fontSize: '11px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
++                        <span style={{ fontSize: '14px' }}>👥</span>
++                        <div>
++                          <div style={{ fontWeight: '700', color: '#166534' }}>공유 캘린더 업데이트</div>
++                          <div style={{ color: '#15803d', marginTop: '2px' }}>지민님이 새로운 약속 일정을 등록했습니다.</div>
++                        </div>
++                      </div>
++                    </div>
++                  </div>
++                )}
++
++                {mobileTab === 'shared' && (
++                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '4px', height: '100%' }}>
++                    <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-main)', marginBottom: '4px' }}>캘린더 공유 상태 👥</div>
++                    
++                    <div className="toggle-switch-row" style={{ backgroundColor: '#ffffff', padding: '10px 12px', borderRadius: '10px', boxShadow: 'var(--shadow-sm)', marginBottom: '6px' }}>
++                      <span style={{ fontSize: '12px', fontWeight: '600' }}>나만 보기 모드</span>
++                      <label className="switch" style={{ width: '34px', height: '18px' }}>
++                        <input 
++                          type="checkbox" 
++                          checked={isPrivateMode}
++                          onChange={(e) => setIsPrivateMode(e.target.checked)}
++                        />
++                        <span className="slider" style={{ borderRadius: '18px' }}></span>
++                      </label>
++                    </div>
+ 
+-            <div className="phone-screen">
+-              <div className="phone-body">
+-                {/* Tabs */}
+-                <div className="detail-tab-row">
+-                  <div className="detail-tab">일 (근무)</div>
+-                  <div className="detail-tab active">약속</div>
+-                </div>
++                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', padding: '0 4px', marginBottom: '8px' }}>
++                      나만 보기 모드가 활성화되면 다른 친구들이 내 스케줄을 볼 수 없습니다.
++                    </div>
+ 
+-                {/* Event Header */}
+-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+-                  <h2 style={{ fontSize: '18px', fontWeight: '700' }}>{activeApt.title}</h2>
+-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+-                    <Clock size={12} />
+-                    <span>2024.05.15 (수) {activeApt.time} - 13:30</span>
+-                  </div>
+-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+-                    <MapPin size={12} />
+-                    <span>{activeApt.place}</span>
++                    <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)', padding: '0 4px', marginBottom: '4px' }}>공유 파트너 목록</div>
++                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '180px', overflowY: 'auto' }}>
++                      {sharedUsers.map(user => (
++                        <div key={user.id} style={{ 
++                          backgroundColor: '#ffffff', 
++                          padding: '10px 12px', 
++                          borderRadius: '10px', 
++                          boxShadow: 'var(--shadow-sm)',
++                          display: 'flex',
++                          justifyContent: 'space-between',
++                          alignItems: 'center'
++                        }}>
++                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
++                            <div style={{ 
++                              width: '28px', 
++                              height: '28px', 
++                              borderRadius: '50%', 
++                              backgroundColor: 'var(--primary-light)', 
++                              color: 'var(--primary)', 
++                              display: 'flex', 
++                              alignItems: 'center', 
++                              justifyContent: 'center',
++                              fontSize: '11px',
++                              fontWeight: '700'
++                            }}>
++                              {user.name.substring(0, 2)}
++                            </div>
++                            <div>
++                              <div style={{ fontSize: '12px', fontWeight: '700', color: '#334155' }}>{user.name}</div>
++                              <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{user.relation}</div>
++                            </div>
++                          </div>
++                          <span style={{ fontSize: '10px', backgroundColor: user.privilege.includes('편집') ? '#fee2e2' : '#eff6ff', color: user.privilege.includes('편집') ? '#ef4444' : '#3b82f6', padding: '2px 6px', borderRadius: '4px', fontWeight: '600' }}>
++                            {user.privilege}
++                          </span>
++                        </div>
++                      ))}
++                    </div>
+                   </div>
+-                </div>
++                )}
+ 
+-                {/* Participants */}
+-                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
+-                  <span style={{ fontSize: '12px', fontWeight: '600', display: 'block', marginBottom: '8px' }}>참여자</span>
+-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+-                    {activeApt.participants ? activeApt.participants.map((p, idx) => (
+-                      <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+-                        <img 
+-                          src={p.avatar} 
+-                          alt={p.name} 
+-                          style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} 
+-                        />
+-                        <span style={{ fontSize: '10px' }}>{p.name}</span>
++                {mobileTab === 'settings' && (
++                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '4px', height: '100%' }}>
++                    {/* 1. 공휴일 캘린더 (Matches the photo exactly!) */}
++                    <div style={{ 
++                      backgroundColor: '#ffffff', 
++                      borderRadius: '12px', 
++                      border: '1px solid #e2e8f0', 
++                      padding: '14px', 
++                      boxShadow: 'var(--shadow-sm)',
++                      display: 'flex',
++                      flexDirection: 'column',
++                      gap: '12px',
++                      marginTop: '10px'
++                    }}>
++                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
++                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
++                          <span style={{ fontSize: '16px', color: '#ef4444' }}>📅</span>
++                          <span style={{ fontSize: '13px', fontWeight: '700', color: '#1e293b' }}>공휴일 캘린더</span>
++                        </div>
++                        <label className="switch" style={{ width: '34px', height: '18px' }}>
++                          <input 
++                            type="checkbox" 
++                            checked={settings.showHolidayCalendar !== false}
++                            onChange={(e) => setSettings({ ...settings, showHolidayCalendar: e.target.checked })}
++                          />
++                          <span className="slider" style={{ borderRadius: '18px' }}></span>
++                        </label>
+                       </div>
+-                    )) : (
+-                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>나 단독 일정</span>
+-                    )}
+-                    <button 
+-                      style={{ width: '36px', height: '36px', borderRadius: '50%', border: '1px dashed var(--border-color)', display: 'flex', alignItems: 'center', justifyStyle: 'center', fontSize: '16px', color: 'var(--text-muted)', justifyContent: 'center' }}
+-                      onClick={handleInviteFriend}
+-                    >
+-                      +
+-                    </button>
+-                  </div>
+-                </div>
+ 
+-                {/* Alarm Settings simulator */}
+-                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+-                  <span style={{ fontSize: '12px', fontWeight: '600' }}>알람 설정</span>
+-                  
+-                  <div className="toggle-switch-row">
+-                    <span>전날 18:00 알람</span>
+-                    <label className="switch" style={{ width: '36px', height: '20px' }}>
+-                      <input type="checkbox" defaultChecked />
+-                      <span className="slider"></span>
+-                    </label>
+-                  </div>
++                      <div style={{ height: '1px', backgroundColor: '#f1f5f9', margin: '2px 0' }}></div>
+ 
+-                  <div className="toggle-switch-row">
+-                    <span>1시간 전 알림</span>
+-                    <label className="switch" style={{ width: '36px', height: '20px' }}>
+-                      <input type="checkbox" />
+-                      <span className="slider"></span>
+-                    </label>
+-                  </div>
+-                </div>
++                      <div style={{ 
++                        display: 'flex', 
++                        flexDirection: 'column', 
++                        gap: '10px', 
++                        opacity: settings.showHolidayCalendar !== false ? 1 : 0.5,
++                        transition: 'opacity 0.2s ease'
++                      }}>
++                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: settings.showHolidayCalendar !== false ? 'pointer' : 'not-allowed' }}>
++                          <input 
++                            type="checkbox" 
++                            checked={settings.showKoreanHolidays}
++                            disabled={settings.showHolidayCalendar === false}
++                            onChange={(e) => setSettings({ ...settings, showKoreanHolidays: e.target.checked })}
++                            style={{ 
++                              width: '15px', 
++                              height: '15px', 
++                              accentColor: 'var(--primary)',
++                              cursor: settings.showHolidayCalendar !== false ? 'pointer' : 'not-allowed'
++                            }}
++                          />
++                          <span style={{ fontSize: '12px', color: '#334155', fontWeight: '500' }}>한국 공휴일 표시</span>
++                        </label>
+ 
+-                {/* Repeat settings */}
+-                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+-                  <span>반복</span>
+-                  <span style={{ color: 'var(--text-muted)' }}>반복 안함 ❯</span>
+-                </div>
++                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: settings.showHolidayCalendar !== false ? 'pointer' : 'not-allowed' }}>
++                          <input 
++                            type="checkbox" 
++                            checked={settings.showAlternativeHolidays}
++                            disabled={settings.showHolidayCalendar === false}
++                            onChange={(e) => setSettings({ ...settings, showAlternativeHolidays: e.target.checked })}
++                            style={{ 
++                              width: '15px', 
++                              height: '15px', 
++                              accentColor: 'var(--primary)',
++                              cursor: settings.showHolidayCalendar !== false ? 'pointer' : 'not-allowed'
++                            }}
++                          />
++                          <span style={{ fontSize: '12px', color: '#334155', fontWeight: '500' }}>대체 공휴일 표시</span>
++                        </label>
+ 
+-                {/* Edit / Delete footer */}
+-                <div style={{ marginTop: 'auto', display: 'flex', gap: '10px' }}>
+-                  <button 
+-                    className="btn-secondary" 
+-                    style={{ flex: 1, padding: '10px' }}
+-                    onClick={() => alert('삭제는 상단 데스크탑 상세창에서 가능합니다.')}
+-                  >
+-                    삭제
+-                  </button>
+-                  <button 
+-                    className="btn-save" 
+-                    style={{ flex: 2, padding: '10px' }}
+-                    onClick={() => alert('수정은 상단 데스크탑 상세창에서 가능합니다.')}
+-                  >
+-                    수정
+-                  </button>
+-                </div>
+-              </div>
+-            </div>
+-          </div>
+-        </div>
++                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: settings.showHolidayCalendar !== false ? 'pointer' : 'not-allowed' }}>
++                          <input 
++                            type="checkbox" 
++                            checked={settings.showLunarAnniversaries}
++                            disabled={settings.showHolidayCalendar === false}
++                            onChange={(e) => setSettings({ ...settings, showLunarAnniversaries: e.target.checked })}
++                            style={{ 
++                              width: '15px', 
++                              height: '15px', 
++                              accentColor: 'var(--primary)',
++                              cursor: settings.showHolidayCalendar !== false ? 'pointer' : 'not-allowed'
++                            }}
++                          />
++                          <span style={{ fontSize: '12px', color: '#334155', fontWeight: '500' }}>음력 기념일 표시</span>
++                        </label>
+ 
++                        <button 
++                          style={{ 
++                            marginTop: '4px',
++                            backgroundColor: '#f1f5f9',
++                            border: 'none',
++                            color: '#475569',
++                            fontSize: '11px',
++                            fontWeight: '600',
++                            padding: '8px 12px',
++                            borderRadius: '8px',
++                            cursor: 'pointer',
++                            textAlign: 'center',
++                            transition: 'background-color 0.2s ease',
++                            display: 'flex',
++                            alignItems: 'center',
++                            justifyContent: 'center',
++                            gap: '4px'
++                          }}
++                          onClick={() => alert('달력 데이터가 추가로 연동되었습니다.')}
++                        >
++                          <span>+ 캘린더 추가</span>
++                        </button>
++                      </div>
++                    </div>
++              sharedUsers={sharedUsers}
++              setSharedUsers={setSharedUsers}
++              isPrivateMode={isPrivateMode}
++              setIsPrivateMode={setIsPrivateMode}
++              onAddBirthday={handleAddBirthday}
++              currentTab={currentTab}
++            />
++          </div>
++        )}
+       </main>
+ 
+       {/* 3. Right Sidebar Detail */}
+-      <SidebarRight 
+-        selectedDateStr={selectedDay}
+-        events={events}
+-        shifts={shifts}
+-        onAddEventClick={handleOpenAddModal}
+-        onEditEvent={handleEditEvent}
+-        onDeleteEvent={handleDeleteEvent}
+-        isPrivateMode={isPrivateMode}
+-        holidaysMap={holidaysMap}
+-      />
++      {currentTab === 'calendar' && (
++        <SidebarRight 
++          selectedDateStr={selectedDay}
++          events={events}
++          shifts={shifts}
++          onAddEventClick={handleOpenAddModal}
++          onEditEvent={handleEditEvent}
++          onDeleteEvent={handleDeleteEvent}
++          isPrivateMode={isPrivateMode}
++          holidaysMap={holidaysMap}
++          calendarPerspective={calendarPerspective}
++          sharedUsers={sharedUsers}
++          isReadOnlyPerspective={isReadOnlyPerspective}
++          settings={settings}
++        />
++      )}
+ 
+       {/* 4. Add/Edit Shift or Appointment Modal overlay */}
+       {showAddModal && (
+-        <div className="dialog-overlay">
+-          <div className="dialog-content">
++        <div className="dialog-overlay" onClick={() => setShowAddModal(false)}>
++          <div className="dialog-content" onClick={(e) => e.stopPropagation()}>
+             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+               <h3 style={{ fontSize: '16px', fontWeight: '700' }}>
+                 {editTarget ? '일정 수정하기' : `${selectedDay} 일정 추가`}
+@@ -921,7 +1085,23 @@ export default function App() {
+               </button>
+             </div>
+ 
++            {isReadOnlyPerspective && (
++              <div style={{
++                color: '#ef4444',
++                backgroundColor: '#fee2e2',
++                border: '1px solid #fca5a5',
++                padding: '8px 12px',
++                borderRadius: '6px',
++                fontSize: '11px',
++                fontWeight: 'bold',
++                marginTop: '10px'
++              }}>
++                ⚠️ 보기 전용 모드입니다. 이 캘린더에 대한 편집 권한이 없어 일정을 추가, 수정 또는 삭제할 수 없습니다.
++              </div>
++            )}
++
+             <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
++              <fieldset disabled={isReadOnlyPerspective} style={{ border: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+               
+               {/* Type Switch (Only show if not editing or editing a non-trip event) */}
+               {!editTarget && (
+@@ -931,14 +1111,14 @@ export default function App() {
+                     className={`solar-lunar-btn ${formType === 'shift' ? 'active' : ''}`}
+                     onClick={() => setFormType('shift')}
+                   >
+-                    근무 스케줄 (간호사)
++                    근무 스케줄
+                   </button>
+                   <button 
+                     type="button" 
+                     className={`solar-lunar-btn ${formType === 'appointment' ? 'active' : ''}`}
+                     onClick={() => setFormType('appointment')}
+                   >
+-                    개인 약속 / 행사
++                    일정 / 약속
+                   </button>
+                 </div>
+               )}
+@@ -965,7 +1145,7 @@ export default function App() {
+                 <>
+                   <div className="toggle-switch-row" style={{ margin: '4px 0 10px 0' }}>
+                     <span className="settings-label" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
+-                      📅 여러 날짜에 걸친 일정 (기간 설정)
++                      기간 설정
+                     </span>
+                     <label className="switch">
+                       <input 
+@@ -1027,16 +1207,35 @@ export default function App() {
+                         </div>
+                         <div className="settings-form-row">
+                           <span className="settings-label">배너 색상</span>
+-                          <select 
+-                            value={formTripColor}
+-                            onChange={(e) => setFormTripColor(e.target.value)}
+-                            className="input-text"
+-                            style={{ height: '38px', padding: '0 10px' }}
+-                          >
+-                            <option value="blue">파란색 (기본)</option>
+-                            <option value="purple">보라색</option>
+-                            <option value="emerald">초록색</option>
+-                          </select>
++                          <div style={{ display: 'flex', gap: '8px', marginTop: '6px', alignItems: 'center' }}>
++                            {[
++                              { value: 'blue', hex: '#3b82f6', label: '파란색' },
++                              { value: 'purple', hex: '#a855f7', label: '보라색' },
++                              { value: 'emerald', hex: '#10b981', label: '초록색' },
++                              { value: 'orange', hex: '#f97316', label: '주황색' },
++                              { value: 'pink', hex: '#ec4899', label: '분홍색' }
++                            ].map(opt => (
++                              <button
++                                key={opt.value}
++                                type="button"
++                                onClick={() => setFormTripColor(opt.value)}
++                                style={{
++                                  width: '24px',
++                                  height: '24px',
++                                  borderRadius: '50%',
++                                  backgroundColor: opt.hex + '25',
++                                  border: formTripColor === opt.value ? `2.5px solid ${opt.hex}` : `1px solid ${opt.hex}40`,
++                                  padding: 0,
++                                  cursor: 'pointer',
++                                  transform: formTripColor === opt.value ? 'scale(1.2)' : 'scale(1)',
++                                  transition: 'all 0.15s ease-in-out',
++                                  outline: 'none',
++                                  boxShadow: formTripColor === opt.value ? '0 2px 4px rgba(0,0,0,0.1)' : 'none'
++                                }}
++                                title={opt.label}
++                              />
++                            ))}
++                          </div>
+                         </div>
+                       </div>
+                     </>
+@@ -1065,32 +1264,289 @@ export default function App() {
+                         </div>
+                       </div>
+ 
+-                      <div className="toggle-switch-row" style={{ marginTop: '4px' }}>
+-                        <span className="settings-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+-                          🔒 일정 나만 보기 (공유 시 비공개)
++                      <div className="settings-form-row" style={{ marginTop: '10px' }}>
++                        <span className="settings-label">일정 색상</span>
++                        <div style={{ display: 'flex', gap: '8px', marginTop: '6px', alignItems: 'center' }}>
++                          {[
++                            { value: 'blue', hex: '#3b82f6', label: '파란색' },
++                            { value: 'purple', hex: '#a855f7', label: '보라색' },
++                            { value: 'emerald', hex: '#10b981', label: '초록색' },
++                            { value: 'orange', hex: '#f97316', label: '주황색' },
++                            { value: 'pink', hex: '#ec4899', label: '분홍색' }
++                          ].map(opt => (
++                            <button
++                              key={opt.value}
++                              type="button"
++                              onClick={() => setFormTripColor(opt.value)}
++                              style={{
++                                width: '24px',
++                                height: '24px',
++                                borderRadius: '50%',
++                                backgroundColor: opt.hex + '25',
++                                border: formTripColor === opt.value ? `2.5px solid ${opt.hex}` : `1px solid ${opt.hex}40`,
++                                padding: 0,
++                                cursor: 'pointer',
++                                transform: formTripColor === opt.value ? 'scale(1.2)' : 'scale(1)',
++                                transition: 'all 0.15s ease-in-out',
++                                outline: 'none',
++                                boxShadow: formTripColor === opt.value ? '0 2px 4px rgba(0,0,0,0.1)' : 'none'
++                              }}
++                              title={opt.label}
++                            />
++                          ))}
++                        </div>
++                      </div>
++
++                      <div className="settings-form-row" style={{ marginTop: '10px' }}>
++                        <span className="settings-label">표시 형태</span>
++                        <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
++                          <button
++                            type="button"
++                            onClick={() => setFormAptDisplayMode('dot')}
++                            style={{
++                              flex: 1,
++                              display: 'flex',
++                              flexDirection: 'column',
++                              alignItems: 'center',
++                              padding: '12px',
++                              borderRadius: '8px',
++                              border: `2px solid ${formAptDisplayMode === 'dot' ? 'var(--primary)' : 'var(--border-color)'}`,
++                              backgroundColor: formAptDisplayMode === 'dot' ? 'var(--primary-light)' : '#ffffff',
++                              cursor: 'pointer',
++                              transition: 'all 0.15s ease',
++                              outline: 'none'
++                            }}
++                          >
++                            {/* Mini preview */}
++                            <div style={{
++                              display: 'flex',
++                              alignItems: 'center',
++                              gap: '4px',
++                              fontSize: '10px',
++                              color: '#334155',
++                              padding: '6px 10px',
++                              border: '1px solid #e2e8f0',
++                              borderRadius: '4px',
++                              backgroundColor: '#ffffff',
++                              width: '100%',
++                              justifyContent: 'center'
++                            }}>
++                              <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#3b82f6', display: 'inline-block' }}></span>
++                              <span style={{ fontSize: '11px', fontWeight: '600' }}>일정 제목</span>
++                            </div>
++                          </button>
++
++                          <button
++                            type="button"
++                            onClick={() => setFormAptDisplayMode('box')}
++                            style={{
++                              flex: 1,
++                              display: 'flex',
++                              flexDirection: 'column',
++                              alignItems: 'center',
++                              padding: '12px',
++                              borderRadius: '8px',
++                              border: `2px solid ${formAptDisplayMode === 'box' ? 'var(--primary)' : 'var(--border-color)'}`,
++                              backgroundColor: formAptDisplayMode === 'box' ? 'var(--primary-light)' : '#ffffff',
++                              cursor: 'pointer',
++                              transition: 'all 0.15s ease',
++                              outline: 'none'
++                            }}
++                          >
++                            {/* Mini preview */}
++                            <div style={{
++                              display: 'flex',
++                              alignItems: 'center',
++                              fontSize: '10px',
++                              color: '#1e3a8a',
++                              backgroundColor: '#eff6ff',
++                              border: '1px solid #bfdbfe',
++                              borderLeft: '4px solid #3b82f6',
++                              padding: '6px 10px 6px 8px',
++                              borderRadius: '4px',
++                              width: '100%',
++                              justifyContent: 'center'
++                            }}>
++                              <span style={{ fontSize: '11px', fontWeight: '700' }}>일정 제목</span>
++                            </div>
++                          </button>
++                        </div>
++                      </div>
++
++                      <div className="settings-form-row" style={{ marginTop: '10px' }}>
++                        <span className="settings-label" style={{ fontWeight: '700', marginBottom: '6px', display: 'block' }}>
++                          👥 공유 범위 설정 (일정 공개 대상)
+                         </span>
+-                        <label className="switch">
+-                          <input 
+-                            type="checkbox" 
+-                            checked={formAptIsPrivate}
+-                            onChange={(e) => setFormAptIsPrivate(e.target.checked)}
+-                          />
+-                          <span className="slider"></span>
+-                        </label>
++                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
++                          {/* Option 1: 나만 보기 */}
++                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', cursor: 'pointer' }}>
++                            <input 
++                              type="radio" 
++                              name="shareScope" 
++                              checked={formShareScope === 'private'}
++                              onChange={() => {
++                                setFormShareScope('private');
++                                setFormSharedWithIds([]);
++                              }}
++                            />
++                            <span>🔒 나만 보기 (비공개)</span>
++                          </label>
++
++                          {/* Option 2: 전체 공개 */}
++                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', cursor: 'pointer' }}>
++                            <input 
++                              type="radio" 
++                              name="shareScope" 
++                              checked={formShareScope === 'public'}
++                              onChange={() => {
++                                setFormShareScope('public');
++                                setFormSharedWithIds(sharedUsers.map(u => u.id));
++                              }}
++                            />
++                            <span>🌐 전체 공개 (연동된 모든 친구)</span>
++                          </label>
++
++                          {/* Option 3: 특정 친구 선택 */}
++                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', cursor: 'pointer' }}>
++                            <input 
++                              type="radio" 
++                              name="shareScope" 
++                              checked={formShareScope === 'custom'}
++                              onChange={() => setFormShareScope('custom')}
++                            />
++                            <span>👥 특정 친구 지정</span>
++                          </label>
++
++                          {/* Checkbox list of friends if custom is selected */}
++                          {formShareScope === 'custom' && (
++                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', paddingLeft: '20px', marginTop: '4px' }}>
++                              {sharedUsers.map(user => {
++                                const isChecked = formSharedWithIds.includes(user.id);
++                                return (
++                                  <label key={user.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', cursor: 'pointer', backgroundColor: '#ffffff', padding: '2px 6px', borderRadius: '4px', border: '1px solid #cbd5e1' }}>
++                                    <input 
++                                      type="checkbox"
++                                      checked={isChecked}
++                                      onChange={() => {
++                                        if (isChecked) {
++                                          setFormSharedWithIds(formSharedWithIds.filter(id => id !== user.id));
++                                        } else {
++                                          setFormSharedWithIds([...formSharedWithIds, user.id]);
++                                        }
++                                      }}
++                                    />
++                                    <span>{user.name}</span>
++                                  </label>
++                                );
++                              })}
++                            </div>
++                          )}
++
++                          <div style={{ borderTop: '1px dashed #cbd5e1', marginTop: '6px', paddingTop: '8px' }}>
++                            <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--text-muted)', marginBottom: '4px' }}>
++                              ➕ 새로운 공유인 추가 (해당 일정 공유)
++                            </div>
++                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
++                              <input 
++                                type="text"
++                                placeholder="친구 이름"
++                                className="input-text"
++                                style={{ padding: '4px 8px', fontSize: '11px', height: '26px', flex: 2 }}
++                                value={formInlineShareName}
++                                onChange={(e) => setFormInlineShareName(e.target.value)}
++                              />
++                              <select 
++                                style={{ padding: '2px 4px', fontSize: '11px', height: '26px', flex: 1.5, borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: '#ffffff' }}
++                                value={formInlineShareRelation}
++                                onChange={(e) => setFormInlineShareRelation(e.target.value)}
++                              >
++                                <option value="친구">친구</option>
++                                <option value="연인">연인</option>
++                                <option value="가족">가족</option>
++                              </select>
++                              <button
++                                type="button"
++                                onClick={handleAddInlineShareTarget}
++                                style={{
++                                  padding: '4px 10px',
++                                  fontSize: '11px',
++                                  backgroundColor: 'var(--primary)',
++                                  color: '#ffffff',
++                                  border: 'none',
++                                  borderRadius: '4px',
++                                  cursor: 'pointer',
++                                  height: '26px',
++                                  fontWeight: '600'
++                                }}
++                              >
++                                추가
++                              </button>
++                            </div>
++                          </div>
++                        </div>
+                       </div>
+                     </>
+                   )}
+                 </>
+               )}
+ 
++              </fieldset>
++
+               <div className="dialog-footer">
+-                <button type="button" onClick={() => setShowAddModal(false)} className="btn-secondary">
+-                  취소
+-                </button>
+-                <button type="submit" className="btn-save" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+-                  <Check size={14} />
+-                  <span>저장</span>
+-                </button>
++                {isReadOnlyPerspective ? (
++                  <button 
++                    type="button" 
++                    onClick={() => setShowAddModal(false)} 
++                    className="btn-secondary"
++                    style={{ width: '100%', justifyContent: 'center' }}
++                  >
++                    닫기 (읽기 전용)
++                  </button>
++                ) : (
++                  <>
++                    {editTarget && (
++                      <button 
++                        type="button" 
++                        onClick={() => {
++                          handleDeleteEvent(editTarget.id);
++                          setShowAddModal(false);
++                        }} 
++                        style={{
++                          marginRight: 'auto',
++                          display: 'flex',
++                          alignItems: 'center',
++                          gap: '4px',
++                          padding: '8px 16px',
++                          borderRadius: 'var(--radius-sm)',
++                          backgroundColor: '#fee2e2',
++                          color: '#ef4444',
++                          border: '1px solid #fca5a5',
++                          fontWeight: '600',
++                          fontSize: '13px',
++                          cursor: 'pointer',
++                          transition: 'background-color 0.15s ease'
++                        }}
++                        onMouseEnter={(e) => {
++                          e.currentTarget.style.backgroundColor = '#fecaca';
++                        }}
++                        onMouseLeave={(e) => {
++                          e.currentTarget.style.backgroundColor = '#fee2e2';
++                        }}
++                      >
++                        <Trash2 size={14} />
++                        <span>삭제</span>
++                      </button>
++                    )}
++                    
++                    <button type="button" onClick={() => setShowAddModal(false)} className="btn-secondary">
++                      취소
++                    </button>
++                    <button type="submit" className="btn-save" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
++                      <Check size={14} />
++                      <span>저장</span>
++                    </button>
++                  </>
++                )}
+               </div>
+ 
+             </form>
