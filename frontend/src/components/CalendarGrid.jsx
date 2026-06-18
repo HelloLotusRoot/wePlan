@@ -666,7 +666,7 @@ export default function CalendarGrid({
                 let cellClass = "day-cell";
                 if (!cell.isCurrentMonth) cellClass += " other-month";
                 if (isCellToday) cellClass += " today";
-                if (dragOverDate === dateStr) cellClass += " drag-over";
+                // drag-over color handled via inline style below
 
                 // Find if there are shifts on this day
                 const dayShiftEvents = dayEvents.filter(e => e.type === 'shift');
@@ -684,6 +684,10 @@ export default function CalendarGrid({
                       : dayShiftsData[0].data)
                   : null;
 
+                // Compute drag-over border color from the target cell's shift (not the dragged event)
+                const isDragOver = dragOverDate === dateStr;
+                const dragColor = mainShiftData ? mainShiftData.color : '#94a3b8'; // shift color or neutral gray
+
                 return (
                   <div 
                     key={idx} 
@@ -692,15 +696,17 @@ export default function CalendarGrid({
                     onDragOver={(e) => handleDragOver(e, dateStr)}
                     onDragLeave={handleDragLeave}
                     onDrop={(e) => handleDrop(e, dateStr)}
-                    style={
-                      mainShiftData
-                        ? {
-                            backgroundColor: mainShiftData.color + '15',
-                            borderColor: mainShiftData.color + '30',
-                            borderWidth: '2.5px'
-                          }
-                        : {}
-                    }
+                    style={{
+                      ...(mainShiftData ? {
+                        backgroundColor: mainShiftData.color + '15',
+                        borderColor: mainShiftData.color + '30',
+                        borderWidth: '2.5px'
+                      } : {}),
+                      ...(isDragOver ? {
+                        border: `2px dashed ${dragColor}`,
+                        backgroundColor: dragColor + '10'
+                      } : {})
+                    }}
                   >
                     {/* Day info top row */}
                     <div className="day-number-container" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
