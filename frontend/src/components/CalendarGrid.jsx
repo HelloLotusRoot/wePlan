@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getLunarDate, lunarToSolar } from '../utils/lunarCalendar';
 import { getHoliday } from '../utils/holidays';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, MapPin, Sparkles, Cake, Menu, PanelRight, PanelRightClose, Clock, Bell } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, MapPin, Sparkles, Cake, Menu, PanelRight, PanelRightClose, Clock, Bell, FileText } from 'lucide-react';
 
 export default function CalendarGrid({ 
   currentDate, 
@@ -29,7 +29,8 @@ export default function CalendarGrid({
   currentTab,
   primaryShiftMap = {},
   setPrimaryShiftMap,
-  onOpenSettings
+  onOpenSettings,
+  memos = []
 }) {
   const [draggedEventId, setDraggedEventId] = useState(null);
   const yearMenuRef = useRef(null);
@@ -717,6 +718,25 @@ export default function CalendarGrid({
                       }}>
                         {dayNum}
                       </span>
+
+                      {(() => {
+                        const dayMemos = (memos || []).filter(m => m.date === dateStr);
+                        if (dayMemos.length > 0) {
+                          return (
+                            <FileText 
+                              size={12} 
+                              color="var(--primary, #16a34a)" 
+                              style={{ 
+                                marginLeft: '2px', 
+                                flexShrink: 0,
+                                opacity: 0.95
+                              }} 
+                              title={`${dayMemos.length}개의 기록(일기)이 있습니다.`} 
+                            />
+                          );
+                        }
+                        return null;
+                      })()}
 
                       {holiday && (
                         <span className="holiday-label" style={dayShiftsData.length === 0 ? { marginLeft: 'auto' } : {}} title={holiday.name}>{holiday.name}</span>

@@ -241,6 +241,28 @@ export default function App() {
     localStorage.setItem('weplan_primary_shift_map', JSON.stringify(primaryShiftMap));
   }, [primaryShiftMap]);
 
+  // memos: 일기 및 일지 데이터 목록
+  const [memos, setMemos] = useState(() => {
+    const saved = localStorage.getItem('weplan_memos');
+    if (saved && saved !== 'undefined') {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return [];
+  });
+
+  // todos: 할 일 목록 데이터
+  const [todos, setTodos] = useState(() => {
+    const saved = localStorage.getItem('weplan_todos');
+    if (saved && saved !== 'undefined') {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {}
+    }
+    return [];
+  });
+
   const [selectedDay, setSelectedDay] = useState(() => {
     const today = new Date();
     const y = today.getFullYear();
@@ -430,6 +452,22 @@ export default function App() {
       })();
       const sharedUsersData = await api.getSharedUsers(localSharedUsersFallback);
       setSharedUsers(sharedUsersData);
+
+      // 5. Get memos
+      const localMemosFallback = (() => {
+        const saved = localStorage.getItem('weplan_memos');
+        return saved ? JSON.parse(saved) : [];
+      })();
+      const memosData = await api.getMemos(localMemosFallback);
+      setMemos(memosData || []);
+
+      // 6. Get todos
+      const localTodosFallback = (() => {
+        const saved = localStorage.getItem('weplan_todos');
+        return saved ? JSON.parse(saved) : [];
+      })();
+      const todosData = await api.getTodos(localTodosFallback);
+      setTodos(todosData || []);
       
       setDataLoaded(true);
     };
@@ -504,6 +542,18 @@ export default function App() {
     if (!dataLoaded) return;
     api.saveSharedUsers(sharedUsers);
   }, [dataLoaded, sharedUsers]);
+
+  useEffect(() => {
+    localStorage.setItem('weplan_memos', JSON.stringify(memos));
+    if (!dataLoaded) return;
+    api.saveMemos(memos);
+  }, [dataLoaded, memos]);
+
+  useEffect(() => {
+    localStorage.setItem('weplan_todos', JSON.stringify(todos));
+    if (!dataLoaded) return;
+    api.saveTodos(todos);
+  }, [dataLoaded, todos]);
 
   // Open Settings Modal when sidebar tab changes to settings categories
   useEffect(() => {
@@ -899,7 +949,11 @@ export default function App() {
 
   return (
     <div 
-      className={`app-container ${currentTab === 'settings' ? 'settings-active' : ''}`}
+      className={`app-container ${
+        currentTab === 'settings' || currentTab === 'stats' 
+          ? 'settings-active' 
+          : ''
+      }`}
       style={{
         '--right-sidebar-width': showRightSidebar ? `${rightSidebarWidth}px` : '0px'
       }}
@@ -940,6 +994,10 @@ export default function App() {
             sharedUsers={sharedUsers}
             isReadOnlyPerspective={isReadOnlyPerspective}
             settings={settings}
+            memos={memos}
+            setMemos={setMemos}
+            todos={todos}
+            setTodos={setTodos}
           />
         </div>
       )}
@@ -987,13 +1045,10 @@ export default function App() {
           />
         ) : currentTab === 'records' ? (
           <RecordsBoard 
-            events={events}
-            onAddBirthday={handleAddBirthday}
-            onDeleteEvent={(id) => {
-              if (window.confirm('이 생일 정보를 삭제하시겠습니까?')) {
-                setEvents(prev => prev.filter(e => e.id !== id));
-              }
-            }}
+            memos={memos}
+            setMemos={setMemos}
+            todos={todos}
+            setTodos={setTodos}
           />
         ) : (
           <>
@@ -1034,6 +1089,7 @@ export default function App() {
               workViewMode={workViewMode}
               aptViewMode={aptViewMode}
               onMoveEvent={handleMoveEvent}
+              memos={memos}
               onSelectDay={(dateStr) => {
                 setSelectedDay(dateStr);
                 const parts = dateStr.split('-');

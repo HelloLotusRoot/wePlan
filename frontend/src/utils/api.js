@@ -98,5 +98,65 @@ export const api = {
     } catch (e) {
       console.warn("Failed to save shared users to backend.");
     }
+  },
+
+  async getMemos(localFallback) {
+    try {
+      const data = await request('/memos');
+      return data;
+    } catch (e) {
+      return localFallback;
+    }
+  },
+  async saveMemos(memos) {
+    try {
+      return await request('/memos', { method: 'POST', body: JSON.stringify(memos) });
+    } catch (e) {
+      console.warn("Failed to sync all memos to backend.");
+    }
+  },
+  async saveSingleMemo(memo) {
+    try {
+      return await request('/memos/single', { method: 'POST', body: JSON.stringify(memo) });
+    } catch (e) {
+      console.warn("Failed to save memo to backend.");
+    }
+  },
+  async deleteMemo(id) {
+    try {
+      await request(`/memos/${id}`, { method: 'DELETE' });
+    } catch (e) {
+      console.warn("Failed to delete memo from backend.");
+    }
+  },
+
+  async getTodos(localFallback) {
+    try {
+      const data = await request('/todos');
+      return data;
+    } catch (e) {
+      return localFallback;
+    }
+  },
+  async saveTodos(todos) {
+    try {
+      return await request('/todos', { method: 'POST', body: JSON.stringify(todos) });
+    } catch (e) {
+      console.warn("Failed to sync all todos to backend.");
+    }
+  },
+  async saveSingleTodo(todo) {
+    try {
+      return await request('/todos/single', { method: 'POST', body: JSON.stringify(todo) });
+    } catch (e) {
+      console.warn("Failed to save todo to backend.");
+    }
+  },
+  async deleteTodo(id) {
+    try {
+      await request(`/todos/${id}`, { method: 'DELETE' });
+    } catch (e) {
+      console.warn("Failed to delete todo from backend.");
+    }
   }
 };

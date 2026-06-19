@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Clock, MapPin, Users, Calendar, Plus, Edit3, ShieldAlert, Cake } from 'lucide-react';
+import { Clock, MapPin, Users, Calendar, Plus, Edit3, ShieldAlert, Cake, FileText, Trash2, ListTodo, Square, CheckSquare } from 'lucide-react';
 import { getLunarDate, lunarToSolar } from '../utils/lunarCalendar';
 import { getHoliday } from '../utils/holidays';
 
@@ -15,11 +15,28 @@ export default function SidebarRight({
   calendarPerspective,
   sharedUsers,
   isReadOnlyPerspective,
-  settings
+  settings,
+  memos = [],
+  setMemos,
+  todos = [],
+  setTodos
 }) {
   const selectedDate = new Date(selectedDateStr + "T00:00:00");
   
   const [selectedParticipant, setSelectedParticipant] = useState(null);
+
+  // Diary state variables
+  const [isWritingDiary, setIsWritingDiary] = useState(false);
+  const [diaryTitle, setDiaryTitle] = useState('');
+  const [diaryContent, setDiaryContent] = useState('');
+  const [editingDiaryId, setEditingDiaryId] = useState(null);
+
+  React.useEffect(() => {
+    setIsWritingDiary(false);
+    setDiaryTitle('');
+    setDiaryContent('');
+    setEditingDiaryId(null);
+  }, [selectedDateStr]);
 
   const getParticipantDetails = (p) => {
     // Try to find in sharedUsers
@@ -414,6 +431,356 @@ export default function SidebarRight({
           </div>
         )}
       </div>
+
+      {/* 5. To-Do List Section */}
+      {(() => {
+        const dayTodos = (todos || []).filter(t => t.date === selectedDateStr);
+        const generalTodos = (todos || []).filter(t => !t.date);
+        
+        if (dayTodos.length === 0 && generalTodos.length === 0) return null;
+        
+        return (
+          <div className="todo-section-right" style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', backgroundColor: 'var(--bg-card)', marginBottom: '16px', boxShadow: 'var(--shadow-sm)' }}>
+            <h4 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <ListTodo size={16} color="var(--primary)" />
+              할 일 목록 (To-Do)
+            </h4>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Selected Day Todos */}
+              {dayTodos.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-main)', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '4px' }}>
+                    <span>{selectedDateStr} 할 일</span>
+                    <span style={{ fontSize: '10.5px', fontWeight: 'normal', color: 'var(--text-muted)' }}>{dayTodos.length}개</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
+                    {dayTodos.map(todo => (
+                      <div 
+                        key={todo.id} 
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 8px', borderRadius: '6px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)' }}
+                      >
+                        <div 
+                          onClick={() => {
+                            const updated = todos.map(t => t.id === todo.id ? { ...t, completed: !t.completed } : t);
+                            setTodos(updated);
+                          }}
+                          style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', flex: 1, minWidth: 0 }}
+                        >
+                          {todo.completed ? (
+                            <CheckSquare size={15} color="var(--primary)" style={{ flexShrink: 0 }} />
+                          ) : (
+                            <Square size={15} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+                          )}
+                          <span style={{ 
+                            fontSize: '11.5px', 
+                            color: todo.completed ? 'var(--text-muted)' : 'var(--text-main)',
+                            textDecoration: todo.completed ? 'line-through' : 'none',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {todo.text}
+                          </span>
+                        </div>
+                        {!isReadOnlyPerspective && (
+                          <button 
+                            onClick={() => {
+                              if (window.confirm('이 할 일을 삭제하시겠습니까?')) {
+                                setTodos(todos.filter(t => t.id !== todo.id));
+                              }
+                            }}
+                            style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
+                            onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* General Todos */}
+              {generalTodos.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-main)', display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '4px' }}>
+                    <span>기본 할 일</span>
+                    <span style={{ fontSize: '10.5px', fontWeight: 'normal', color: 'var(--text-muted)' }}>{generalTodos.length}개</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
+                    {generalTodos.map(todo => (
+                      <div 
+                        key={todo.id} 
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 8px', borderRadius: '6px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)' }}
+                      >
+                        <div 
+                          onClick={() => {
+                            const updated = todos.map(t => t.id === todo.id ? { ...t, completed: !t.completed } : t);
+                            setTodos(updated);
+                          }}
+                          style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', flex: 1, minWidth: 0 }}
+                        >
+                          {todo.completed ? (
+                            <CheckSquare size={15} color="var(--primary)" style={{ flexShrink: 0 }} />
+                          ) : (
+                            <Square size={15} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+                          )}
+                          <span style={{ 
+                            fontSize: '11.5px', 
+                            color: todo.completed ? 'var(--text-muted)' : 'var(--text-main)',
+                            textDecoration: todo.completed ? 'line-through' : 'none',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {todo.text}
+                          </span>
+                        </div>
+                        {!isReadOnlyPerspective && (
+                          <button 
+                            onClick={() => {
+                              if (window.confirm('이 할 일을 삭제하시겠습니까?')) {
+                                setTodos(todos.filter(t => t.id !== todo.id));
+                              }
+                            }}
+                            style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
+                            onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 4. Daily Diary & Records Section */}
+      {(() => {
+        const dayMemos = (memos || []).filter(memo => memo.date === selectedDateStr);
+        return (
+          <div className="diary-section" style={{ border: '1px solid var(--border-color)', borderRadius: '12px', padding: '16px', backgroundColor: 'var(--bg-card)', marginBottom: '16px', boxShadow: 'var(--shadow-sm)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h4 style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <FileText size={16} color="var(--primary)" />
+                하루 기록 & 일기
+              </h4>
+              {!isReadOnlyPerspective && !isWritingDiary && (
+                <button 
+                  onClick={() => {
+                    setIsWritingDiary(true);
+                    setEditingDiaryId(null);
+                    setDiaryTitle('');
+                    setDiaryContent('');
+                  }} 
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    color: 'var(--primary)',
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '2px'
+                  }}
+                >
+                  <Plus size={12} />
+                  작성하기
+                </button>
+              )}
+            </div>
+
+            {/* Diary Writing/Editing Form */}
+            {isWritingDiary ? (
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!diaryContent.trim()) {
+                    alert('내용을 입력해주세요.');
+                    return;
+                  }
+                  const newMemo = {
+                    id: editingDiaryId || Date.now().toString(),
+                    date: selectedDateStr,
+                    title: diaryTitle.trim() || '오늘의 일기',
+                    category: '일기',
+                    content: diaryContent.trim(),
+                    createdAt: new Date().toISOString()
+                  };
+
+                  if (editingDiaryId) {
+                    setMemos(prev => (prev || []).map(m => m.id === editingDiaryId ? newMemo : m));
+                  } else {
+                    setMemos(prev => [newMemo, ...(prev || [])]);
+                  }
+
+                  // Reset Form
+                  setIsWritingDiary(false);
+                  setDiaryTitle('');
+                  setDiaryContent('');
+                  setEditingDiaryId(null);
+                }}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px'
+                }}
+              >
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input
+                    type="text"
+                    placeholder="제목 (선택)"
+                    value={diaryTitle}
+                    onChange={(e) => setDiaryTitle(e.target.value)}
+                    style={{
+                      flex: 1,
+                      fontSize: '11px',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--bg-body)',
+                      color: 'var(--text-main)',
+                      minWidth: 0
+                    }}
+                  />
+                </div>
+                <textarea
+                  placeholder="오늘 하루는 어땠나요? 일기를 작성해보세요."
+                  value={diaryContent}
+                  onChange={(e) => setDiaryContent(e.target.value)}
+                  rows={4}
+                  style={{
+                    fontSize: '12px',
+                    padding: '8px',
+                    borderRadius: '4px',
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: 'var(--bg-body)',
+                    color: 'var(--text-main)',
+                    resize: 'vertical',
+                    lineHeight: '1.4'
+                  }}
+                />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsWritingDiary(false);
+                      setEditingDiaryId(null);
+                    }}
+                    style={{
+                      fontSize: '11px',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'transparent',
+                      color: 'var(--text-muted)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="submit"
+                    style={{
+                      fontSize: '11px',
+                      padding: '4px 10px',
+                      borderRadius: '4px',
+                      backgroundColor: 'var(--primary)',
+                      color: '#ffffff',
+                      border: 'none',
+                      fontWeight: '600',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    저장
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {dayMemos.length > 0 ? (
+                  dayMemos.map(memo => (
+                    <div 
+                      key={memo.id}
+                      style={{
+                        backgroundColor: 'var(--bg-body)',
+                        borderRadius: '8px',
+                        padding: '10px',
+                        border: '1px solid var(--border-color)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <strong style={{ fontSize: '12px', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '200px' }}>{memo.title}</strong>
+                        </div>
+                        {!isReadOnlyPerspective && (
+                          <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                            <button
+                              onClick={() => {
+                                setEditingDiaryId(memo.id);
+                                setDiaryTitle(memo.title);
+                                setDiaryContent(memo.content);
+                                setIsWritingDiary(true);
+                              }}
+                              style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
+                              title="수정"
+                            >
+                              <Edit3 size={12} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (window.confirm('이 기록을 삭제하시겠습니까?')) {
+                                  setMemos(prev => (prev || []).filter(m => m.id !== memo.id));
+                                }
+                              }}
+                              style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: '#ef4444', display: 'flex', alignItems: 'center' }}
+                              title="삭제"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <p 
+                        style={{ 
+                          fontSize: '11.5px', 
+                          color: 'var(--text-main)', 
+                          margin: 0, 
+                          whiteSpace: 'pre-line',
+                          lineHeight: '1.4',
+                          opacity: 0.9
+                        }}
+                      >
+                        {memo.content}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <div 
+                    style={{
+                      textAlign: 'center',
+                      fontSize: '11px',
+                      color: 'var(--text-muted)',
+                      padding: '8px 0'
+                    }}
+                  >
+                    오늘 작성된 기록이나 일기가 없습니다.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Upcoming Events */}
       <div>

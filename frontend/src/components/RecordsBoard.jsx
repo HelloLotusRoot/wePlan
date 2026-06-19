@@ -5,63 +5,172 @@ import {
   Search, 
   Trash2, 
   Edit, 
-  Cake, 
   BookOpen, 
-  Smile, 
   Check, 
   X,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Sparkles,
+  ChevronLeft,
+  ChevronRight,
+  Square,
+  CheckSquare,
+  ListTodo
 } from 'lucide-react';
 
 export default function RecordsBoard({ 
-  events, 
-  onAddBirthday, 
-  onDeleteEvent 
+  memos = [],
+  setMemos,
+  todos = [],
+  setTodos
 }) {
-  const [activeTab, setActiveTab] = useState('memos'); // 'memos' | 'birthdays'
-  const [memos, setMemos] = useState([]);
-  
   // Memo Form States
   const [memoDate, setMemoDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [memoTitle, setMemoTitle] = useState('');
-  const [memoCategory, setMemoCategory] = useState('일반 메모');
-  const [memoEmoji, setMemoEmoji] = useState('📝');
   const [memoContent, setMemoContent] = useState('');
   const [editingMemoId, setEditingMemoId] = useState(null);
 
-  // Search & Filter States
+  // Search States
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('전체');
 
-  // Birthday Form States (from SettingsPanels.jsx)
-  const [bdayName, setBdayName] = useState('');
-  const [bdayDate, setBdayDate] = useState('2024-01-01');
-  const [bdayIsLunar, setBdayIsLunar] = useState(false);
-  const [bdayAlarmOnDay, setBdayAlarmOnDay] = useState(true);
-  const [bdayAlarmWeekBefore, setBdayAlarmWeekBefore] = useState(false);
-  const [bdaySearchQuery, setBdaySearchQuery] = useState('');
+  // Todo States
+  const [todoText, setTodoText] = useState('');
+  const [todoHasDate, setTodoHasDate] = useState(true);
+  const [activeFormTab, setActiveFormTab] = useState('memo'); // 'memo' or 'todo'
+  const [draftTodos, setDraftTodos] = useState([]);
 
-  // Categories and Emojis
-  const categories = ['일반 메모', '근무 일지', '건강', '쇼핑', '아이디어', '기타'];
-  const emojis = ['📝', '💼', '🏃', '🏥', '🛒', '💡', '🌟', '🍽️', '✈️', '❤️'];
+  // Todo Handlers
+  const handleAddTodo = (e) => {
+    e.preventDefault();
+    if (!todoText.trim()) return;
 
-  // Load memos on mount
+    const newDraft = {
+      id: 'draft-' + Date.now().toString(),
+      text: todoText.trim(),
+      completed: false,
+      date: todoHasDate ? memoDate : '',
+      createdAt: new Date().toISOString()
+    };
+
+    setDraftTodos([newDraft, ...draftTodos]);
+    setTodoText('');
+  };
+
+  const handleDeleteDraft = (id) => {
+    setDraftTodos(draftTodos.filter(item => item.id !== id));
+  };
+
+  const handleSaveDrafts = () => {
+    if (draftTodos.length === 0) return;
+
+    const cleanDrafts = draftTodos.map(todo => ({
+      ...todo,
+      id: todo.id.replace('draft-', '')
+    }));
+
+    setTodos([...cleanDrafts, ...todos]);
+    setDraftTodos([]);
+  };
+
+  const handleToggleTodo = (id) => {
+    const updated = todos.map(todo => {
+      if (todo.id === id) {
+        return { ...todo, completed: !todo.completed };
+      }
+      return todo;
+    });
+    setTodos(updated);
+  };
+
+  const handleDeleteTodo = (id) => {
+    if (window.confirm('이 할 일을 삭제하시겠습니까?')) {
+      const filtered = todos.filter(todo => todo.id !== id);
+      setTodos(filtered);
+    }
+  };
+
+  // Mini Calendar States
+  const [calendarViewDate, setCalendarViewDate] = useState(() => {
+    const d = new Date(memoDate);
+    return isNaN(d.getTime()) ? new Date() : d;
+  });
+
+  // Sync calendar view month when memoDate changes
   useEffect(() => {
-    const saved = localStorage.getItem('weplan_memos');
-    if (saved) {
-      try {
-        setMemos(JSON.parse(saved));
-      } catch (e) {
-        console.error('Failed to parse memos', e);
+    const d = new Date(memoDate);
+    if (!isNaN(d.getTime())) {
+      if (d.getFullYear() !== calendarViewDate.getFullYear() || d.getMonth() !== calendarViewDate.getMonth()) {
+        setCalendarViewDate(d);
       }
     }
-  }, []);
+  }, [memoDate]);
+
+  // Mini Calendar Navigation
+  const handlePrevMonth = () => {
+    setCalendarViewDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCalendarViewDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
+  const handleDayClick = (dateStr) => {
+    setMemoDate(dateStr);
+  };
+
+  const formatDateStr = (dateObj) => {
+    const y = dateObj.getFullYear();
+    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const d = String(dateObj.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+
+  // Generate mini calendar grid cells
+  const getCalendarCells = () => {
+    const year = calendarViewDate.getFullYear();
+    const month = calendarViewDate.getMonth();
+
+    const firstDayIndex = new Date(year, month, 1).getDay();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    const prevMonthTotalDays = new Date(year, month, 0).getDate();
+
+    const cellsList = [];
+
+    // Prev month padding
+    for (let i = firstDayIndex - 1; i >= 0; i--) {
+      const day = prevMonthTotalDays - i;
+      cellsList.push({
+        date: new Date(year, month - 1, day),
+        isCurrentMonth: false,
+        dayNum: day
+      });
+    }
+
+    // Current month days
+    for (let day = 1; day <= totalDays; day++) {
+      cellsList.push({
+        date: new Date(year, month, day),
+        isCurrentMonth: true,
+        dayNum: day
+      });
+    }
+
+    // Next month padding
+    const remaining = 42 - cellsList.length;
+    for (let day = 1; day <= remaining; day++) {
+      cellsList.push({
+        date: new Date(year, month + 1, day),
+        isCurrentMonth: false,
+        dayNum: day
+      });
+    }
+
+    return cellsList;
+  };
 
   // Save memos
   const saveMemos = (updatedMemos) => {
     setMemos(updatedMemos);
-    localStorage.setItem('weplan_memos', JSON.stringify(updatedMemos));
   };
 
   // Add or Edit Memo
@@ -80,8 +189,7 @@ export default function RecordsBoard({
             ...memo,
             date: memoDate,
             title: memoTitle,
-            category: memoCategory,
-            emoji: memoEmoji,
+            category: '일기',
             content: memoContent
           };
         }
@@ -96,8 +204,7 @@ export default function RecordsBoard({
         id: Date.now().toString(),
         date: memoDate,
         title: memoTitle,
-        category: memoCategory,
-        emoji: memoEmoji,
+        category: '일기',
         content: memoContent,
         createdAt: new Date().toISOString()
       };
@@ -108,8 +215,6 @@ export default function RecordsBoard({
     // Reset Form
     setMemoTitle('');
     setMemoContent('');
-    setMemoEmoji('📝');
-    setMemoCategory('일반 메모');
     setMemoDate(new Date().toISOString().split('T')[0]);
   };
 
@@ -126,9 +231,8 @@ export default function RecordsBoard({
     setEditingMemoId(memo.id);
     setMemoDate(memo.date);
     setMemoTitle(memo.title);
-    setMemoCategory(memo.category);
-    setMemoEmoji(memo.emoji);
     setMemoContent(memo.content);
+    setActiveFormTab('memo'); // Switch to memo tab for editing
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -137,212 +241,374 @@ export default function RecordsBoard({
     setEditingMemoId(null);
     setMemoTitle('');
     setMemoContent('');
-    setMemoEmoji('📝');
-    setMemoCategory('일반 메모');
     setMemoDate(new Date().toISOString().split('T')[0]);
-  };
-
-  // Add Birthday
-  const handleBirthdaySubmit = (e) => {
-    e.preventDefault();
-    if (!bdayName.trim()) {
-      alert('이름을 입력해주세요.');
-      return;
-    }
-
-    onAddBirthday({
-      name: bdayName,
-      date: bdayDate,
-      isLunar: bdayIsLunar,
-      alarmOnDay: bdayAlarmOnDay,
-      alarmWeekBefore: bdayAlarmWeekBefore
-    });
-
-    setBdayName('');
-    alert(`${bdayName}님의 생일이 등록되었습니다.`);
   };
 
   // Filter Memos
   const filteredMemos = memos.filter(memo => {
-    const matchesSearch = 
+    return (
       memo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      memo.content.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesCategory = 
-      selectedCategoryFilter === '전체' || memo.category === selectedCategoryFilter;
-
-    return matchesSearch && matchesCategory;
+      memo.content.toLowerCase().includes(searchQuery.toLowerCase())
+    );
   });
 
-  // Get Birthday Events from App.jsx state
-  const birthdayEvents = (events || []).filter(evt => evt.type === 'birthday');
-
-  // Filter Birthdays
-  const filteredBirthdays = birthdayEvents.filter(bday => 
-    bday.name.toLowerCase().includes(bdaySearchQuery.toLowerCase())
-  );
-
   return (
-    <div style={{ padding: '0 20px 40px 20px', maxWidth: '1200px', margin: '0 auto' }}>
+    <div style={{ padding: '0 20px 40px 20px', width: '100%', maxWidth: '100%', margin: '0 auto' }}>
       
-      {/* Board Header */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px', marginBottom: '24px' }}>
-        <h2 style={{ fontSize: '22px', fontWeight: '800', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-          <BookOpen size={24} color="var(--primary)" />
-          기록게시판
-        </h2>
-        <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0 }}>
-          하루의 근무 소회, 개인 메모를 작성하고 등록된 기념일(생일) 목록을 한눈에 관리하세요.
-        </p>
+      {/* Custom Styles */}
+      <style>{`
+        .memo-card-wrapper {
+          background-color: var(--bg-card);
+          padding: 20px;
+          border-radius: 12px;
+          border: 1px solid var(--border-color);
+          border-left: 4px solid var(--primary);
+          box-shadow: var(--shadow-sm);
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .memo-card-wrapper:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 12px 20px -8px rgba(94, 95, 240, 0.15), var(--shadow-md);
+        }
+        
+        .input-glow {
+          transition: all 0.2s ease;
+        }
+        .input-glow:focus {
+          border-color: var(--primary) !important;
+          box-shadow: 0 0 0 3px rgba(94, 95, 240, 0.15) !important;
+          background-color: #ffffff !important;
+        }
+
+        .mini-cal-day {
+          position: relative;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          border-radius: 50%;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 600;
+          transition: all 0.2s ease;
+          user-select: none;
+        }
+        .mini-cal-day:hover {
+          background-color: var(--primary-light);
+          color: var(--primary);
+        }
+        .mini-cal-day.selected {
+          background-color: var(--primary) !important;
+          color: #ffffff !important;
+        }
+        .mini-cal-day.selected:hover {
+          background-color: var(--primary-hover) !important;
+        }
+        .mini-cal-day.today:not(.selected) {
+          border: 1.5px solid var(--primary);
+          color: var(--primary);
+          font-weight: 700;
+        }
+        .mini-cal-day.other-month {
+          opacity: 0.3;
+        }
+
+        .records-grid-layout {
+          display: grid;
+          grid-template-columns: 1fr 320px;
+          gap: 28px;
+          align-items: start;
+        }
+        .memos-list-column {
+          grid-column: span 2;
+        }
+        .memos-cards-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+          gap: 20px;
+          width: 100%;
+        }
+        @media (max-width: 850px) {
+          .records-grid-layout {
+            grid-template-columns: 1fr;
+          }
+          .memos-list-column {
+            grid-column: span 1;
+          }
+        }
+        @media (max-width: 768px) {
+          .todo-tab-layout {
+            grid-template-columns: 1fr !important;
+            gap: 20px !important;
+          }
+          .todo-tab-layout > div:last-child {
+            border-left: none !important;
+            padding-left: 0 !important;
+            border-top: 1.5px dashed var(--border-color);
+            padding-top: 20px;
+          }
+        }
+
+        .draft-todo-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 10px 14px;
+          border-radius: 8px;
+          background-color: var(--bg-card);
+          border: 1px solid var(--border-color);
+          box-shadow: var(--shadow-sm);
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .draft-todo-item:hover {
+          transform: translateY(-1.5px);
+          border-color: var(--primary);
+          box-shadow: 0 4px 10px rgba(94, 95, 240, 0.08), var(--shadow-md);
+        }
+        .draft-todo-checkbox {
+          width: 16px;
+          height: 16px;
+          border-radius: 4px;
+          border: 1.5px solid var(--text-muted);
+          opacity: 0.5;
+          margin-right: 10px;
+          flex-shrink: 0;
+          transition: all 0.2s ease;
+        }
+        .draft-todo-item:hover .draft-todo-checkbox {
+          border-color: var(--primary);
+          opacity: 0.8;
+        }
+        
+        .btn-save-all {
+          width: 100%;
+          padding: 12px;
+          border-radius: 8px;
+          border: none;
+          font-size: 13px;
+          font-weight: 700;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .btn-save-all.active {
+          background: linear-gradient(135deg, var(--primary) 0%, #7c7df6 100%);
+          color: #ffffff;
+          cursor: pointer;
+          box-shadow: 0 4px 10px rgba(94, 95, 240, 0.25);
+        }
+        .btn-save-all.active:hover {
+          transform: translateY(-1.5px);
+          box-shadow: 0 6px 14px rgba(94, 95, 240, 0.35);
+        }
+        .btn-save-all.active:active {
+          transform: translateY(0);
+        }
+        .btn-save-all.disabled {
+          background-color: var(--border-color);
+          color: var(--text-muted);
+          cursor: not-allowed;
+          opacity: 0.7;
+        }
+      `}</style>
+
+      {/* Board Header Banner */}
+      <div style={{ 
+        background: 'linear-gradient(135deg, #eff1fe 0%, #e0e2fe 100%)', 
+        padding: '24px 28px', 
+        borderRadius: '16px', 
+        marginBottom: '28px',
+        boxShadow: 'var(--shadow-sm)',
+        border: '1px solid rgba(94, 95, 240, 0.1)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '20px'
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <h2 style={{ fontSize: '24px', fontWeight: '800', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+            <BookOpen size={26} color="var(--primary)" />
+            기록게시판
+          </h2>
+          <p style={{ fontSize: '13.5px', color: 'var(--text-muted)', margin: 0, lineHeight: '1.5' }}>
+            하루의 근무 소회, 일기를 편하게 기록하고 예쁘게 모아보세요.
+          </p>
+        </div>
+        <div style={{
+          width: '56px',
+          height: '56px',
+          borderRadius: '12px',
+          backgroundColor: '#ffffff',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: 'var(--shadow-sm)',
+          opacity: 0.95
+        }}>
+          <Sparkles size={28} color="var(--primary)" />
+        </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '24px' }}>
-        <button
-          onClick={() => setActiveTab('memos')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '8px 16px',
-            borderRadius: '8px',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: '700',
-            backgroundColor: activeTab === 'memos' ? 'var(--primary)' : 'transparent',
-            color: activeTab === 'memos' ? '#ffffff' : 'var(--text-muted)',
-            transition: 'all 0.2s ease'
-          }}
-        >
-          <FileText size={16} />
-          일지 & 메모
-        </button>
-        <button
-          onClick={() => setActiveTab('birthdays')}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '8px 16px',
-            borderRadius: '8px',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '14px',
-            fontWeight: '700',
-            backgroundColor: activeTab === 'birthdays' ? 'var(--primary)' : 'transparent',
-            color: activeTab === 'birthdays' ? '#ffffff' : 'var(--text-muted)',
-            transition: 'all 0.2s ease'
-          }}
-        >
-          <Cake size={16} />
-          생일 & 기념일
-        </button>
-      </div>
+      {/* Main Content Layout */}
+      <div className="records-grid-layout">
+        
+        {/* Combined Creator & Todo Card */}
+        <div style={{ backgroundColor: 'var(--bg-card)', padding: '24px', borderRadius: '16px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)' }}>
+          {/* Tab Navigation */}
+          <div style={{ display: 'flex', gap: '12px', borderBottom: '1px solid var(--border-color)', paddingBottom: '16px', marginBottom: '20px' }}>
+            <button
+              type="button"
+              onClick={() => setActiveFormTab('memo')}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '8px',
+                fontSize: '13.5px',
+                fontWeight: '800',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                border: 'none',
+                backgroundColor: activeFormTab === 'memo' ? 'var(--primary-light)' : 'transparent',
+                color: activeFormTab === 'memo' ? 'var(--primary)' : 'var(--text-muted)',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <BookOpen size={16} />
+              {editingMemoId ? '하루 기록 수정하기' : '하루 기록하기'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveFormTab('todo')}
+              style={{
+                padding: '8px 16px',
+                borderRadius: '8px',
+                fontSize: '13.5px',
+                fontWeight: '800',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: 'pointer',
+                border: 'none',
+                backgroundColor: activeFormTab === 'todo' ? 'var(--primary-light)' : 'transparent',
+                color: activeFormTab === 'todo' ? 'var(--primary)' : 'var(--text-muted)',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <ListTodo size={16} />
+              할 일 목록 (To-Do)
+            </button>
+          </div>
 
-      {/* Tab Contents: Memos */}
-      {activeTab === 'memos' && (
-        <div className="records-grid-layout" style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: '24px', alignItems: 'start' }}>
-          
-          {/* Memo Creator Form */}
-          <div style={{ backgroundColor: 'var(--bg-card)', padding: '20px', borderRadius: '12px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-main)', marginTop: 0, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              {editingMemoId ? <Edit size={16} color="var(--primary)" /> : <Plus size={16} color="var(--primary)" />}
-              {editingMemoId ? '기록 수정하기' : '새로운 하루 기록하기'}
-            </h3>
-            
-            <form onSubmit={handleMemoSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {activeFormTab === 'memo' ? (
+            <form onSubmit={handleMemoSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
               {/* Date Input */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>날짜</label>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)' }}>날짜</label>
                 <input 
                   type="date" 
                   value={memoDate}
                   onChange={(e) => setMemoDate(e.target.value)}
-                  className="input-text"
-                  style={{ width: '100%' }}
+                  className="input-text input-glow"
+                  style={{ 
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1.5px solid var(--border-color)',
+                    backgroundColor: '#ffffff',
+                    color: 'var(--text-main)',
+                    fontSize: '13px',
+                    outline: 'none'
+                  }}
                 />
               </div>
 
               {/* Title Input */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>제목</label>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)' }}>제목</label>
                 <input 
                   type="text" 
                   value={memoTitle}
                   onChange={(e) => setMemoTitle(e.target.value)}
                   placeholder="예: 오늘 야간 근무 소회"
-                  className="input-text"
-                  style={{ width: '100%' }}
+                  className="input-text input-glow"
+                  style={{ 
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '8px',
+                    border: '1.5px solid var(--border-color)',
+                    backgroundColor: '#ffffff',
+                    color: 'var(--text-main)',
+                    fontSize: '13px',
+                    outline: 'none'
+                  }}
                   maxLength={50}
                 />
               </div>
 
-              {/* Category Dropdown */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>카테고리</label>
-                <select
-                  value={memoCategory}
-                  onChange={(e) => setMemoCategory(e.target.value)}
-                  className="input-select"
-                  style={{ width: '100%' }}
-                >
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Emoji Picker Row */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>대표 아이콘 (이모지)</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {emojis.map(emo => (
-                    <button
-                      key={emo}
-                      type="button"
-                      onClick={() => setMemoEmoji(emo)}
-                      style={{
-                        fontSize: '18px',
-                        padding: '6px',
-                        border: memoEmoji === emo ? '2px solid var(--primary)' : '1px solid var(--border-color)',
-                        borderRadius: '6px',
-                        backgroundColor: memoEmoji === emo ? 'var(--primary-light)' : '#ffffff',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        width: '34px',
-                        height: '34px',
-                        transition: 'all 0.15s ease'
-                      }}
-                    >
-                      {emo}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* Content Textarea */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>기록 내용</label>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)' }}>기록 내용</label>
                 <textarea
                   value={memoContent}
                   onChange={(e) => setMemoContent(e.target.value)}
                   placeholder="오늘의 업무 에피소드나 생각을 편하게 기록해보세요..."
-                  className="input-text"
-                  style={{ width: '100%', height: '140px', resize: 'vertical', fontFamily: 'inherit', lineHeight: '1.5' }}
+                  className="input-text input-glow"
+                  style={{ 
+                    width: '100%', 
+                    height: '160px', 
+                    padding: '12px 14px',
+                    borderRadius: '8px',
+                    border: '1.5px solid var(--border-color)',
+                    backgroundColor: '#ffffff',
+                    color: 'var(--text-main)',
+                    fontSize: '13px',
+                    outline: 'none',
+                    resize: 'vertical', 
+                    fontFamily: 'inherit', 
+                    lineHeight: '1.5' 
+                  }}
                   maxLength={1000}
                 />
               </div>
 
               {/* Action Buttons */}
-              <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+              <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
                 {editingMemoId && (
                   <button 
                     type="button" 
                     onClick={cancelEditing}
-                    style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer', padding: '10px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: '#ffffff', color: 'var(--text-main)', fontSize: '13px', fontWeight: '600' }}
+                    style={{ 
+                      flex: 1, 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center', 
+                      gap: '6px', 
+                      cursor: 'pointer', 
+                      padding: '12px', 
+                      borderRadius: '8px', 
+                      border: '1px solid var(--border-color)', 
+                      backgroundColor: 'var(--bg-card)', 
+                      color: 'var(--text-main)', 
+                      fontSize: '13px', 
+                      fontWeight: '600',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--primary-light)';
+                      e.currentTarget.style.borderColor = 'var(--primary)';
+                      e.currentTarget.style.color = 'var(--primary)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--bg-card)';
+                      e.currentTarget.style.borderColor = 'var(--border-color)';
+                      e.currentTarget.style.color = 'var(--text-main)';
+                    }}
                   >
                     <X size={14} />
                     취소
@@ -350,401 +616,593 @@ export default function RecordsBoard({
                 )}
                 <button 
                   type="submit" 
-                  className="btn-primary"
-                  style={{ flex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer', padding: '10px', borderRadius: '8px', fontSize: '13px', fontWeight: '700' }}
+                  style={{ 
+                    flex: 2, 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'center', 
+                    gap: '6px', 
+                    cursor: 'pointer', 
+                    padding: '12px', 
+                    borderRadius: '8px', 
+                    fontSize: '13px', 
+                    fontWeight: '700',
+                    backgroundColor: 'var(--primary)',
+                    color: '#ffffff',
+                    border: 'none',
+                    boxShadow: '0 4px 10px rgba(94, 95, 240, 0.25)',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--primary-hover)';
+                    e.currentTarget.style.transform = 'translateY(-1px)';
+                    e.currentTarget.style.boxShadow = '0 6px 14px rgba(94, 95, 240, 0.35)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--primary)';
+                    e.currentTarget.style.transform = 'none';
+                    e.currentTarget.style.boxShadow = '0 4px 10px rgba(94, 95, 240, 0.25)';
+                  }}
                 >
                   <Check size={14} />
                   {editingMemoId ? '수정완료' : '기록하기'}
                 </button>
               </div>
             </form>
-          </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div className="todo-tab-layout" style={{ 
+              display: 'grid', 
+              gridTemplateColumns: draftTodos.length > 0 ? '1fr 1fr' : '1fr', 
+              gap: '28px' 
+            }}>
+              {/* Column 1: Input & Existing Saved List */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {/* Todo Add Form */}
+                <form onSubmit={handleAddTodo} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                  {/* Date Input Header & Field (Hides input when General checked) */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)' }}>날짜</label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={!todoHasDate}
+                          onChange={(e) => setTodoHasDate(!e.target.checked)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                        기본 할 일로 지정 (날짜 없음)
+                      </label>
+                    </div>
+                    {todoHasDate && (
+                      <input 
+                        type="date" 
+                        value={memoDate}
+                        onChange={(e) => setMemoDate(e.target.value)}
+                        className="input-text input-glow"
+                        style={{ 
+                          width: '100%',
+                          padding: '10px 14px',
+                          borderRadius: '8px',
+                          border: '1.5px solid var(--border-color)',
+                          backgroundColor: '#ffffff',
+                          color: 'var(--text-main)',
+                          fontSize: '13px',
+                          outline: 'none',
+                          marginTop: '4px'
+                        }}
+                      />
+                    )}
+                  </div>
 
-          {/* Memos List & Filtering */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            
-            {/* Filter & Search Bar */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: 'var(--bg-card)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-              
-              {/* Search Input */}
-              <div style={{ position: 'relative', width: '100%' }}>
-                <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="기록한 내용이나 제목으로 검색해보세요..."
-                  className="input-text"
-                  style={{ width: '100%', paddingLeft: '36px' }}
-                />
-              </div>
+                  {/* Todo Input Field */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)' }}>할 일 내용</label>
+                    <input 
+                      type="text" 
+                      value={todoText}
+                      onChange={(e) => setTodoText(e.target.value)}
+                      placeholder="예: 오늘 퇴근 전 주간 보고서 제출"
+                      className="input-text input-glow"
+                      style={{ 
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        border: '1.5px solid var(--border-color)',
+                        backgroundColor: '#ffffff',
+                        color: 'var(--text-main)',
+                        fontSize: '13px',
+                        outline: 'none'
+                      }}
+                      maxLength={100}
+                    />
+                  </div>
 
-              {/* Category Filter Chips */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-                <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)', marginRight: '6px' }}>카테고리:</span>
-                {['전체', ...categories].map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setSelectedCategoryFilter(cat)}
-                    style={{
-                      padding: '4px 12px',
-                      borderRadius: '16px',
-                      fontSize: '12px',
-                      fontWeight: '600',
-                      border: '1px solid',
-                      borderColor: selectedCategoryFilter === cat ? 'var(--primary)' : 'var(--border-color)',
-                      backgroundColor: selectedCategoryFilter === cat ? 'var(--primary-light)' : '#ffffff',
-                      color: selectedCategoryFilter === cat ? 'var(--primary)' : 'var(--text-muted)',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease'
+                  {/* Action Button */}
+                  <button 
+                    type="submit" 
+                    style={{ 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      justifyContent: 'center', 
+                      gap: '6px', 
+                      cursor: 'pointer', 
+                      padding: '12px', 
+                      borderRadius: '8px', 
+                      fontSize: '13px', 
+                      fontWeight: '700',
+                      backgroundColor: 'var(--primary)',
+                      color: '#ffffff',
+                      border: 'none',
+                      boxShadow: '0 4px 10px rgba(94, 95, 240, 0.25)',
+                      transition: 'all 0.2s ease',
+                      marginTop: '4px'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--primary-hover)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                      e.currentTarget.style.boxShadow = '0 6px 14px rgba(94, 95, 240, 0.35)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'var(--primary)';
+                      e.currentTarget.style.transform = 'none';
+                      e.currentTarget.style.boxShadow = '0 4px 10px rgba(94, 95, 240, 0.25)';
                     }}
                   >
-                    {cat}
+                    <Plus size={14} />
+                    투두리스트로 이동
                   </button>
-                ))}
-              </div>
-            </div>
+                </form>
 
-            {/* Memos Render */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {filteredMemos.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '60px 20px', backgroundColor: 'var(--bg-card)', borderRadius: '12px', border: '1px dashed var(--border-color)', color: 'var(--text-muted)' }}>
-                  <AlertCircle size={32} style={{ opacity: 0.5, marginBottom: '8px' }} />
-                  <p style={{ margin: 0, fontSize: '13px' }}>등록된 일지나 기록이 없습니다.</p>
-                  <p style={{ margin: '4px 0 0 0', fontSize: '11px', opacity: 0.7 }}>왼쪽 폼에서 첫 일지를 기록해 보세요!</p>
-                </div>
-              ) : (
-                filteredMemos.map(memo => (
-                  <div 
-                    key={memo.id}
-                    className="memo-card-hover"
-                    style={{
-                      backgroundColor: 'var(--bg-card)',
-                      padding: '18px',
-                      borderRadius: '12px',
-                      border: '1px solid var(--border-color)',
-                      boxShadow: 'var(--shadow-sm)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '12px',
-                      transition: 'transform 0.2s ease, box-shadow 0.2s ease'
-                    }}
-                  >
-                    {/* Header info */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontSize: '20px' }}>{memo.emoji}</span>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <h4 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-main)', margin: 0 }}>
-                            {memo.title}
-                          </h4>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                              <Calendar size={11} />
-                              {memo.date}
-                            </span>
-                            <span style={{
-                              fontSize: '9px',
-                              fontWeight: '700',
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              backgroundColor: memo.category === '근무 일지' ? '#e0f2fe' : '#f1f5f9',
-                              color: memo.category === '근무 일지' ? '#0369a1' : 'var(--text-muted)'
+                {/* Selected Date Todos */}
+                {todos.filter(t => t.date === memoDate).length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ fontSize: '12.5px', fontWeight: '800', color: 'var(--text-main)', borderBottom: '1px solid var(--border-color)', paddingBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{memoDate} 할 일</span>
+                      <span style={{ fontSize: '11px', fontWeight: 'normal', color: 'var(--text-muted)' }}>
+                        {todos.filter(t => t.date === memoDate).length}개
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '160px', overflowY: 'auto' }}>
+                      {todos.filter(t => t.date === memoDate).map(todo => (
+                        <div 
+                          key={todo.id}
+                          style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'space-between', 
+                            padding: '6px 8px', 
+                            borderRadius: '6px', 
+                            backgroundColor: 'var(--bg-app)', 
+                            border: '1px solid var(--border-color)',
+                            transition: 'all 0.15s ease' 
+                          }}
+                        >
+                          <div 
+                            onClick={() => handleToggleTodo(todo.id)}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', flex: 1, minWidth: 0 }}
+                          >
+                            {todo.completed ? (
+                              <CheckSquare size={16} color="var(--primary)" style={{ flexShrink: 0 }} />
+                            ) : (
+                              <Square size={16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+                            )}
+                            <span style={{ 
+                              fontSize: '12px', 
+                              color: todo.completed ? 'var(--text-muted)' : 'var(--text-main)',
+                              textDecoration: todo.completed ? 'line-through' : 'none',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
                             }}>
-                              {memo.category}
+                              {todo.text}
                             </span>
                           </div>
+                          <button 
+                            onClick={() => handleDeleteTodo(todo.id)}
+                            style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
+                            onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                          >
+                            <Trash2 size={13} />
+                          </button>
                         </div>
-                      </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-                      {/* Edit/Delete Actions */}
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <button
-                          onClick={() => startEditing(memo)}
-                          style={{
-                            padding: '6px',
-                            borderRadius: '6px',
-                            border: 'none',
-                            backgroundColor: 'transparent',
-                            cursor: 'pointer',
-                            color: 'var(--text-muted)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
+                {/* General / Date-less Todos */}
+                {todos.filter(t => !t.date).length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
+                    <div style={{ fontSize: '12.5px', fontWeight: '800', color: 'var(--text-main)', borderBottom: '1px solid var(--border-color)', paddingBottom: '4px', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>기본 할 일</span>
+                      <span style={{ fontSize: '11px', fontWeight: 'normal', color: 'var(--text-muted)' }}>
+                        {todos.filter(t => !t.date).length}개
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '160px', overflowY: 'auto' }}>
+                      {todos.filter(t => !t.date).map(todo => (
+                        <div 
+                          key={todo.id}
+                          style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'space-between', 
+                            padding: '6px 8px', 
+                            borderRadius: '6px', 
+                            backgroundColor: 'var(--bg-app)', 
+                            border: '1px solid var(--border-color)',
+                            transition: 'all 0.15s ease' 
                           }}
-                          title="수정"
                         >
-                          <Edit size={14} />
-                        </button>
-                        <button
-                          onClick={() => handleMemoDelete(memo.id)}
-                          style={{
-                            padding: '6px',
-                            borderRadius: '6px',
-                            border: 'none',
-                            backgroundColor: 'transparent',
-                            cursor: 'pointer',
-                            color: '#ef4444',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}
+                          <div 
+                            onClick={() => handleToggleTodo(todo.id)}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', flex: 1, minWidth: 0 }}
+                          >
+                            {todo.completed ? (
+                              <CheckSquare size={16} color="var(--primary)" style={{ flexShrink: 0 }} />
+                            ) : (
+                              <Square size={16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+                            )}
+                            <span style={{ 
+                              fontSize: '12px', 
+                              color: todo.completed ? 'var(--text-muted)' : 'var(--text-main)',
+                              textDecoration: todo.completed ? 'line-through' : 'none',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              {todo.text}
+                            </span>
+                          </div>
+                          <button 
+                            onClick={() => handleDeleteTodo(todo.id)}
+                            style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
+                            onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Column 2: Draft / Temporary Todos & Save Button */}
+              {draftTodos.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', borderLeft: '1.5px dashed var(--border-color)', paddingLeft: '28px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '320px', overflowY: 'auto', paddingRight: '4px' }}>
+                    {draftTodos.map(todo => (
+                      <div 
+                        key={todo.id}
+                        className="draft-todo-item"
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
+                          <div className="draft-todo-checkbox" />
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flex: 1, minWidth: 0 }}>
+                            <span style={{ fontSize: '12.5px', color: 'var(--text-main)', fontWeight: '600', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {todo.text}
+                            </span>
+                            {todo.date && (
+                              <span style={{ 
+                                alignSelf: 'flex-start',
+                                fontSize: '9.5px', 
+                                color: 'var(--primary)', 
+                                backgroundColor: 'var(--primary-light)', 
+                                padding: '1px 6px',
+                                borderRadius: '4px',
+                                fontWeight: '700'
+                              }}>
+                                {todo.date}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => handleDeleteDraft(todo.id)}
+                          style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center', transition: 'color 0.2s' }}
+                          onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
                           title="삭제"
                         >
-                          <Trash2 size={14} />
+                          <X size={15} />
                         </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveDrafts}
+                    className="btn-save-all active"
+                  >
+                    <Check size={16} />
+                    투두리스트 저장하기
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+          )}
+        </div>
+
+        {/* Right Section (Calendar only) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
+          {/* Mini Calendar Card */}
+          <div style={{ backgroundColor: 'var(--bg-card)', padding: '20px', borderRadius: '16px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)' }}>
+            <div style={{ maxWidth: '340px', margin: '0 auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text-main)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Calendar size={18} color="var(--primary)" />
+                  기록 현황 달력
+                </h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button 
+                    type="button"
+                    onClick={handlePrevMonth}
+                    style={{ 
+                      border: 'none', 
+                      background: 'none', 
+                      cursor: 'pointer', 
+                      color: 'var(--text-muted)', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      padding: '4px',
+                      borderRadius: '4px',
+                      transition: 'background-color 0.2s'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--primary-light)'}
+                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-main)', minWidth: '75px', textAlign: 'center', userSelect: 'none' }}>
+                    {calendarViewDate.getFullYear()}년 {calendarViewDate.getMonth() + 1}월
+                  </span>
+                  <button 
+                    type="button"
+                    onClick={handleNextMonth}
+                    style={{ 
+                      border: 'none', 
+                      background: 'none', 
+                      cursor: 'pointer', 
+                      color: 'var(--text-muted)', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      padding: '4px',
+                      borderRadius: '4px',
+                      transition: 'background-color 0.2s'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--primary-light)'}
+                    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Weekdays */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center', marginBottom: '8px' }}>
+                {['일', '월', '화', '수', '목', '금', '토'].map((wd, idx) => (
+                  <span 
+                    key={wd} 
+                    style={{ 
+                      fontSize: '11px', 
+                      fontWeight: '700', 
+                      color: idx === 0 ? '#ef4444' : idx === 6 ? '#3b82f6' : 'var(--text-muted)',
+                      opacity: 0.8
+                    }}
+                  >
+                    {wd}
+                  </span>
+                ))}
+              </div>
+
+              {/* Days Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px' }}>
+                {getCalendarCells().map((cell, idx) => {
+                  const dateStr = formatDateStr(cell.date);
+                  const isSelected = memoDate === dateStr;
+                  const isToday = formatDateStr(new Date()) === dateStr;
+                  const hasDiary = memos.some(m => m.date === dateStr);
+                  const hasTodos = todos.some(t => t.date === dateStr);
+                  return (
+                    <div
+                      key={idx}
+                      onClick={() => handleDayClick(dateStr)}
+                      className={`mini-cal-day ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''} ${!cell.isCurrentMonth ? 'other-month' : ''}`}
+                      style={{ height: '34px', width: '34px', margin: '0 auto' }}
+                    >
+                      <span>{cell.dayNum}</span>
+                      <div style={{
+                        position: 'absolute',
+                        bottom: '3px',
+                        display: 'flex',
+                        gap: '3px',
+                        justifyContent: 'center',
+                        left: 0,
+                        right: 0
+                      }}>
+                        {hasDiary && (
+                          <span style={{
+                            width: '4px',
+                            height: '4px',
+                            borderRadius: '50%',
+                            backgroundColor: isSelected ? '#ffffff' : 'var(--primary)'
+                          }} />
+                        )}
+                        {hasTodos && (
+                          <span style={{
+                            width: '4px',
+                            height: '4px',
+                            borderRadius: '50%',
+                            backgroundColor: isSelected ? '#ffffff' : '#f59e0b'
+                          }} />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Memos List & Filtering */}
+        <div className="memos-list-column" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
+          {/* Filter & Search Bar */}
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: '12px', 
+            backgroundColor: 'var(--bg-card)', 
+            padding: '16px', 
+            borderRadius: '12px', 
+            border: '1px solid var(--border-color)',
+            boxShadow: 'var(--shadow-sm)'
+          }}>
+            {/* Search Input */}
+            <div style={{ position: 'relative', width: '100%' }}>
+              <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="기록한 내용이나 제목으로 검색해보세요..."
+                className="input-text input-glow"
+                style={{ 
+                  width: '100%', 
+                  padding: '10px 14px 10px 36px', 
+                  borderRadius: '8px', 
+                  border: '1.5px solid var(--border-color)', 
+                  backgroundColor: '#ffffff', 
+                  color: 'var(--text-main)', 
+                  fontSize: '13px', 
+                  outline: 'none', 
+                  transition: 'all 0.2s ease' 
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Memos Render */}
+          <div 
+            className={filteredMemos.length === 0 ? "" : "memos-cards-grid"} 
+            style={filteredMemos.length === 0 ? { display: 'flex', flexDirection: 'column', gap: '14px' } : {}}
+          >
+            {filteredMemos.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 20px', backgroundColor: 'var(--bg-card)', borderRadius: '12px', border: '1px dashed var(--border-color)', color: 'var(--text-muted)' }}>
+                <AlertCircle size={32} style={{ opacity: 0.5, marginBottom: '8px' }} />
+                <p style={{ margin: 0, fontSize: '13px' }}>등록된 일지나 기록이 없습니다.</p>
+                <p style={{ margin: '4px 0 0 0', fontSize: '11px', opacity: 0.7 }}>왼쪽 폼에서 첫 일지를 기록해 보세요!</p>
+              </div>
+            ) : (
+              filteredMemos.map(memo => (
+                <div 
+                  key={memo.id}
+                  className="memo-card-wrapper"
+                >
+                  {/* Header info */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ 
+                        width: '36px', 
+                        height: '36px', 
+                        borderRadius: '8px', 
+                        backgroundColor: 'var(--primary-light)', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}>
+                        <FileText size={18} color="var(--primary)" />
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <h4 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-main)', margin: 0 }}>
+                          {memo.title}
+                        </h4>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                            <Calendar size={11} />
+                            {memo.date}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    {/* Content body */}
-                    <p style={{
-                      fontSize: '13px',
-                      color: 'var(--text-main)',
-                      lineHeight: '1.6',
-                      margin: 0,
-                      whiteSpace: 'pre-wrap',
-                      backgroundColor: '#f8fafc',
-                      padding: '12px',
-                      borderRadius: '8px',
-                      border: '1px solid #f1f5f9'
-                    }}>
-                      {memo.content}
-                    </p>
-                  </div>
-                ))
-              )}
-            </div>
-
-          </div>
-
-        </div>
-      )}
-
-      {/* Tab Contents: Birthdays */}
-      {activeTab === 'birthdays' && (
-        <div className="records-grid-layout" style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: '24px', alignItems: 'start' }}>
-          
-          {/* Birthday Creator Form */}
-          <div style={{ backgroundColor: 'var(--bg-card)', padding: '20px', borderRadius: '12px', border: '1px solid var(--border-color)', boxShadow: 'var(--shadow-sm)' }}>
-            <h3 style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-main)', marginTop: 0, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Plus size={16} color="var(--primary)" />
-              새로운 생일 등록하기
-            </h3>
-
-            <form onSubmit={handleBirthdaySubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {/* Name Input */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>이름</label>
-                <input 
-                  type="text" 
-                  value={bdayName}
-                  onChange={(e) => setBdayName(e.target.value)}
-                  placeholder="예: 홍길동"
-                  className="input-text"
-                  style={{ width: '100%' }}
-                />
-              </div>
-
-              {/* Date Input */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>생년월일 (날짜)</label>
-                <input 
-                  type="date" 
-                  value={bdayDate}
-                  onChange={(e) => setBdayDate(e.target.value)}
-                  className="input-text"
-                  style={{ width: '100%' }}
-                />
-              </div>
-
-              {/* Lunar/Solar Checkbox */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <input
-                  type="checkbox"
-                  id="bdayIsLunar"
-                  checked={bdayIsLunar}
-                  onChange={(e) => setBdayIsLunar(e.target.checked)}
-                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                />
-                <label htmlFor="bdayIsLunar" style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-main)', cursor: 'pointer' }}>
-                  음력 생일로 등록
-                </label>
-              </div>
-
-              {/* Alarm Options */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
-                <label style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-muted)' }}>알림 시간 설정</label>
-                
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input
-                    type="checkbox"
-                    id="bdayAlarmOnDay"
-                    checked={bdayAlarmOnDay}
-                    onChange={(e) => setBdayAlarmOnDay(e.target.checked)}
-                    style={{ width: '15px', height: '15px', cursor: 'pointer' }}
-                  />
-                  <label htmlFor="bdayAlarmOnDay" style={{ fontSize: '12px', color: 'var(--text-main)', cursor: 'pointer' }}>
-                    당일 오전 9시 알림
-                  </label>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input
-                    type="checkbox"
-                    id="bdayAlarmWeekBefore"
-                    checked={bdayAlarmWeekBefore}
-                    onChange={(e) => setBdayAlarmWeekBefore(e.target.checked)}
-                    style={{ width: '15px', height: '15px', cursor: 'pointer' }}
-                  />
-                  <label htmlFor="bdayAlarmWeekBefore" style={{ fontSize: '12px', color: 'var(--text-main)', cursor: 'pointer' }}>
-                    일주일 전 오전 9시 알림
-                  </label>
-                </div>
-              </div>
-
-              {/* Submit Button */}
-              <button 
-                type="submit" 
-                className="btn-primary"
-                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', cursor: 'pointer', padding: '10px', borderRadius: '8px', fontSize: '13px', fontWeight: '700', marginTop: '4px' }}
-              >
-                <Cake size={14} />
-                생일 등록하기
-              </button>
-            </form>
-          </div>
-
-          {/* Birthday List & Search */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            
-            {/* Search Bar */}
-            <div style={{ display: 'flex', backgroundColor: 'var(--bg-card)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-              <div style={{ position: 'relative', width: '100%' }}>
-                <Search size={16} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
-                <input
-                  type="text"
-                  value={bdaySearchQuery}
-                  onChange={(e) => setBdaySearchQuery(e.target.value)}
-                  placeholder="이름으로 등록된 생일을 검색해보세요..."
-                  className="input-text"
-                  style={{ width: '100%', paddingLeft: '36px' }}
-                />
-              </div>
-            </div>
-
-            {/* Birthday Cards Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '14px' }}>
-              {filteredBirthdays.length === 0 ? (
-                <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '60px 20px', backgroundColor: 'var(--bg-card)', borderRadius: '12px', border: '1px dashed var(--border-color)', color: 'var(--text-muted)' }}>
-                  <AlertCircle size={32} style={{ opacity: 0.5, marginBottom: '8px' }} />
-                  <p style={{ margin: 0, fontSize: '13px' }}>등록된 생일 정보가 없습니다.</p>
-                </div>
-              ) : (
-                filteredBirthdays.map(bday => {
-                  const parts = bday.date.split('-');
-                  const formattedDate = parts.length === 3 ? `${parseInt(parts[1], 10)}월 ${parseInt(parts[2], 10)}일` : bday.date;
-
-                  return (
-                    <div
-                      key={bday.id}
-                      style={{
-                        backgroundColor: 'var(--bg-card)',
-                        padding: '16px',
-                        borderRadius: '12px',
-                        border: '1px solid var(--border-color)',
-                        boxShadow: 'var(--shadow-sm)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '12px',
-                        position: 'relative'
-                      }}
-                    >
-                      {/* Trash action */}
+                    {/* Edit/Delete Actions */}
+                    <div style={{ display: 'flex', gap: '4px' }}>
                       <button
-                        onClick={() => onDeleteEvent(bday.id)}
+                        onClick={() => startEditing(memo)}
                         style={{
-                          position: 'absolute',
-                          right: '12px',
-                          top: '12px',
                           padding: '6px',
                           borderRadius: '6px',
                           border: 'none',
                           backgroundColor: 'transparent',
                           cursor: 'pointer',
-                          color: '#ef4444',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                        title="생일 정보 삭제"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-
-                      {/* Birthday Card content */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{
-                          width: '38px',
-                          height: '38px',
-                          borderRadius: '50%',
-                          backgroundColor: '#fce7f3',
+                          color: 'var(--text-muted)',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          fontSize: '18px'
-                        }}>
-                          🎂
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                          <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-main)' }}>
-                            {bday.name}
-                          </span>
-                          <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            {formattedDate} 
-                            <span style={{ 
-                              fontSize: '10px', 
-                              padding: '1px 5px', 
-                              borderRadius: '3px', 
-                              backgroundColor: bday.isLunar ? '#fae8ff' : '#eff6ff',
-                              color: bday.isLunar ? '#a21caf' : '#1d4ed8',
-                              fontWeight: '600'
-                            }}>
-                              {bday.isLunar ? '음력' : '양력'}
-                            </span>
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Alarms row */}
-                      <div style={{ 
-                        borderTop: '1px solid var(--border-color)', 
-                        paddingTop: '10px', 
-                        display: 'flex', 
-                        flexDirection: 'column', 
-                        gap: '4px',
-                        fontSize: '11px',
-                        color: 'var(--text-muted)'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <span style={{ color: bday.alarmOnDay ? '#10b981' : '#94a3b8' }}>●</span>
-                          당일 오전 9시 알림: {bday.alarmOnDay ? '켜짐' : '꺼짐'}
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <span style={{ color: bday.alarmWeekBefore ? '#10b981' : '#94a3b8' }}>●</span>
-                          일주일 전 알림: {bday.alarmWeekBefore ? '켜짐' : '꺼짐'}
-                        </div>
-                      </div>
+                          transition: 'color 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.color = 'var(--primary)'}
+                        onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                        title="수정"
+                      >
+                        <Edit size={14} />
+                      </button>
+                      <button
+                        onClick={() => handleMemoDelete(memo.id)}
+                        style={{
+                          padding: '6px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          backgroundColor: 'transparent',
+                          cursor: 'pointer',
+                          color: 'var(--text-muted)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'color 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                        onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                        title="삭제"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     </div>
-                  );
-                })
-              )}
-            </div>
+                  </div>
 
+                  {/* Content body */}
+                  <p style={{
+                    fontSize: '13px',
+                    color: 'var(--text-main)',
+                    lineHeight: '1.6',
+                    margin: 0,
+                    whiteSpace: 'pre-wrap',
+                    backgroundColor: 'var(--bg-app)',
+                    padding: '12px 16px',
+                    borderRadius: '8px',
+                    border: '1.5px solid var(--border-color)',
+                    opacity: 0.95
+                  }}>
+                    {memo.content}
+                  </p>
+                </div>
+              ))
+            )}
           </div>
 
         </div>
-      )}
 
+      </div>
     </div>
   );
 }

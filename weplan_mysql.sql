@@ -57,4 +57,22 @@ CREATE TABLE IF NOT EXISTS shared_users (
     is_sharing TINYINT(1) DEFAULT 1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS memos (
+    id VARCHAR(50) NOT NULL PRIMARY KEY,
+    date VARCHAR(10),
+    title VARCHAR(255),
+    category VARCHAR(100),
+    emoji VARCHAR(20),
+    content TEXT,
+    created_at VARCHAR(50)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS todos (
+    id VARCHAR(50) NOT NULL PRIMARY KEY,
+    text VARCHAR(255) NOT NULL,
+    completed TINYINT(1) DEFAULT 0,
+    date VARCHAR(10),
+    created_at VARCHAR(50)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 SHOW TABLES;
