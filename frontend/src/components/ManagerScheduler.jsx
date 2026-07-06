@@ -16,12 +16,14 @@ import {
   AlertCircle,
   Settings, Paintbrush
 } from 'lucide-react';
+import { getHoliday } from '../utils/holidays';
 
 export default function ManagerScheduler({ 
   currentDate, 
   events = [], 
   setEvents,
-  shifts = [] 
+  shifts = [],
+  holidaysMap = {}
 }) {
   // 1. Core States
   const [selectedYear, setSelectedYear] = useState(() => currentDate ? currentDate.getFullYear() : new Date().getFullYear());
@@ -2054,13 +2056,27 @@ export default function ManagerScheduler({
                   {daysArray.map(d => {
                     const isSunday = d.dayOfWeek === 0;
                     const isSaturday = d.dayOfWeek === 6;
+                    
+                    const y = selectedYear;
+                    const m = String(selectedMonth).padStart(2, '0');
+                    const dayStr = String(d.day).padStart(2, '0');
+                    const dateStr = `${y}-${m}-${dayStr}`;
+                    
+                    const holiday = holidaysMap[dateStr] || getHoliday(dateStr);
+                    const isHoliday = !!holiday;
+                    
                     let dayClass = 'col-day';
-                    if (isSunday) dayClass += ' sunday';
+                    if (isSunday || isHoliday) dayClass += ' sunday';
                     else if (isSaturday) dayClass += ' saturday';
 
                     const weekdayLabels = ['일', '월', '화', '수', '목', '금', '토'];
                     return (
-                      <th key={d.day} className={dayClass} style={{ padding: '4px 0' }}>
+                      <th 
+                        key={d.day} 
+                        className={dayClass} 
+                        style={{ padding: '4px 0', cursor: holiday ? 'help' : 'default' }}
+                        title={holiday ? holiday.name : undefined}
+                      >
                         <div>{d.day}</div>
                         <div style={{ fontSize: '9px', fontWeight: '500', opacity: 0.8 }}>{weekdayLabels[d.dayOfWeek]}</div>
                       </th>

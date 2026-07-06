@@ -1074,6 +1074,7 @@ export default function App() {
             events={events}
             setEvents={setEvents}
             shifts={shifts}
+            holidaysMap={holidaysMap}
           />
         ) : currentTab === 'stats' ? (
           <StatsDashboard 
