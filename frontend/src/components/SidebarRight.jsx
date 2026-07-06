@@ -233,7 +233,7 @@ export default function SidebarRight({
                           borderRadius: '10px',
                           fontWeight: '700'
                         }}>
-                          스케줄
+                          근무
                         </span>
                       </span>
                       {!isReadOnlyPerspective && (
@@ -274,7 +274,7 @@ export default function SidebarRight({
                 const place = isBirthday ? null : (isPrivate ? '비공개' : evt.place);
                 const displayTime = isBirthday 
                   ? (evt.isLunar ? '음력 생일' : '양력 생일') 
-                  : (evt.startDate ? '하루 종일' : evt.time);
+                  : (evt.startDate ? '하루 종일' : (evt.time || '하루 종일'));
 
                 let customStyle = {};
                 let isBoxMode = false;

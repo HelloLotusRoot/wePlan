@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getLunarDate, lunarToSolar } from '../utils/lunarCalendar';
 import { getHoliday } from '../utils/holidays';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, MapPin, Sparkles, Cake, Menu, PanelRight, PanelRightClose, Clock, Bell, FileText } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, MapPin, Sparkles, Cake, Menu, PanelRight, PanelRightClose, Clock, Bell, FileText, Search, ListTodo } from 'lucide-react';
 
 export default function CalendarGrid({ 
   currentDate, 
@@ -30,9 +30,11 @@ export default function CalendarGrid({
   primaryShiftMap = {},
   setPrimaryShiftMap,
   onOpenSettings,
-  memos = []
+  memos = [],
+  todos = []
 }) {
   const [draggedEventId, setDraggedEventId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const yearMenuRef = useRef(null);
   const monthMenuRef = useRef(null);
 
@@ -53,6 +55,20 @@ export default function CalendarGrid({
       return true;
     }
   });
+
+  // Filter events based on search term
+  const searchedEvents = React.useMemo(() => {
+    return events.filter(evt => {
+      if (!searchTerm.trim()) return true;
+      const term = searchTerm.toLowerCase().trim();
+      const titleMatch = (evt.title || '').toLowerCase().includes(term);
+      const staffMatch = (evt.staffName || '').toLowerCase().includes(term);
+      const labelMatch = (evt.label || '').toLowerCase().includes(term);
+      const descMatch = (evt.description || '').toLowerCase().includes(term);
+      const nameMatch = (evt.name || '').toLowerCase().includes(term);
+      return titleMatch || staffMatch || labelMatch || descMatch || nameMatch;
+    });
+  }, [events, searchTerm]);
 
   const getShareIcon = (evt) => {
     if (calendarPerspective !== 'me') return '';
@@ -257,7 +273,7 @@ export default function CalendarGrid({
 
     weekDays.forEach(dayCell => {
       const dateStr = formatDateString(dayCell.date);
-      const dayEvts = events.filter(evt => {
+      const dayEvts = searchedEvents.filter(evt => {
         if (evt.type === 'shift') return false;
         if (evt.startDate && evt.endDate) {
           return dateStr >= evt.startDate && dateStr <= evt.endDate;
@@ -525,6 +541,85 @@ export default function CalendarGrid({
             </div>
           )}
 
+          {/* Calendar Event Search Input */}
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', marginRight: '6px' }}>
+            <Search 
+              size={14} 
+              style={{ 
+                position: 'absolute', 
+                left: '10px', 
+                color: searchTerm ? 'var(--primary)' : 'var(--text-muted)',
+                transition: 'color 0.15s ease'
+              }} 
+            />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="일정 또는 이름 검색..."
+              style={{
+                padding: '6px 24px 6px 28px',
+                fontSize: '12px',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--border-color)',
+                outline: 'none',
+                width: '165px',
+                height: '30px',
+                boxSizing: 'border-box',
+                backgroundColor: 'var(--bg-app)',
+                color: 'var(--text-main)',
+                transition: 'all 0.15s ease-in-out',
+                fontWeight: '500'
+              }}
+              onFocus={(e) => {
+                e.target.style.backgroundColor = '#ffffff';
+                e.target.style.borderColor = 'var(--primary)';
+                e.target.style.boxShadow = '0 0 0 3px rgba(94, 95, 240, 0.12)';
+              }}
+              onBlur={(e) => {
+                e.target.style.backgroundColor = searchTerm ? '#ffffff' : 'var(--bg-app)';
+                e.target.style.borderColor = searchTerm ? 'var(--primary)' : 'var(--border-color)';
+                e.target.style.boxShadow = 'none';
+              }}
+              className="search-input"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                style={{
+                  position: 'absolute',
+                  right: '8px',
+                  border: 'none',
+                  background: 'var(--border-color)',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  fontSize: '9px',
+                  fontWeight: '800',
+                  width: '14px',
+                  height: '14px',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.12s ease-in-out',
+                  padding: 0
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--text-muted)';
+                  e.currentTarget.style.color = '#ffffff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'var(--border-color)';
+                  e.currentTarget.style.color = 'var(--text-muted)';
+                }}
+                title="검색어 초기화"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
           <div className="header-view-toggle" style={{ display: 'flex', alignItems: 'center' }}>
             {['월', '주'].map((v, i) => {
               const vKeys = ['month', 'week'];
@@ -609,7 +704,7 @@ export default function CalendarGrid({
           const uniqueWeekEventIds = new Set();
           weekDays.forEach(dayCell => {
             const dateStr = formatDateString(dayCell.date);
-            const dayEvts = events.filter(evt => {
+            const dayEvts = searchedEvents.filter(evt => {
               if (evt.type === 'shift') return false;
               if (evt.startDate && evt.endDate) {
                 return dateStr >= evt.startDate && dateStr <= evt.endDate;
@@ -647,7 +742,7 @@ export default function CalendarGrid({
                 const holiday = (rawHoliday && (!rawHoliday.isAlternative || settings.showAlternativeHolidays)) ? rawHoliday : null;
 
                 // Filter events for this day
-                const dayEvents = events.filter(evt => {
+                const dayEvents = searchedEvents.filter(evt => {
                   if (evt.startDate && evt.endDate) {
                     return dateStr >= evt.startDate && dateStr <= evt.endDate;
                   }
@@ -774,6 +869,29 @@ export default function CalendarGrid({
                                 opacity: 0.95
                               }} 
                               title={`${dayMemos.length}개의 기록(일기)이 있습니다.`} 
+                            />
+                          );
+                        }
+                        return null;
+                      })()}
+
+                      {(() => {
+                        const dayTodos = (todos || []).filter(t => t.date === dateStr);
+                        const pendingTodos = dayTodos.filter(t => !t.completed);
+                        if (dayTodos.length > 0) {
+                          return (
+                            <ListTodo 
+                              size={12} 
+                              color={pendingTodos.length > 0 ? "var(--primary, #5e5ff0)" : "#94a3b8"} 
+                              style={{ 
+                                marginLeft: '2px', 
+                                flexShrink: 0,
+                                opacity: 0.95
+                              }} 
+                              title={pendingTodos.length > 0 
+                                ? `${dayTodos.length}개의 할 일 중 ${pendingTodos.length}개 미완료`
+                                : "모든 할 일 완료!"
+                              } 
                             />
                           );
                         }

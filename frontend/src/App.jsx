@@ -293,6 +293,7 @@ export default function App() {
 
 
   const [formAptTime, setFormAptTime] = useState('12:00');
+  const [formAptIsAllDay, setFormAptIsAllDay] = useState(false);
   const [formAptPlace, setFormAptPlace] = useState('');
   const [formAptIsPrivate, setFormAptIsPrivate] = useState(false);
   const [formIsRange, setFormIsRange] = useState(false);
@@ -351,21 +352,7 @@ export default function App() {
             ...mergedHols
           }));
 
-          // Automatically clear shifts on newly detected holiday dates
-          const holidayDates = Object.keys(mergedHols);
-          setEvents(prevEvents => {
-            const cleaned = prevEvents.filter(e => {
-              if (e.type === 'shift' && holidayDates.includes(e.date)) {
-                return false;
-              }
-              return true;
-            });
-            const removedCount = prevEvents.length - cleaned.length;
-            if (removedCount > 0) {
-              console.log(`[Holiday Sync] Removed ${removedCount} shifts because they fall on holidays.`);
-            }
-            return cleaned;
-          });
+
         }
       } catch (error) {
         console.error("Failed to load holidays:", error);
@@ -690,6 +677,7 @@ export default function App() {
 
 
     setFormAptTime('12:00');
+    setFormAptIsAllDay(false);
     setFormAptPlace('');
     setFormAptIsPrivate(false);
     setFormIsRange(false);
@@ -725,6 +713,7 @@ export default function App() {
       setFormTripColor(evt.color || 'blue');
       setFormAptTitle(evt.title || '');
       setFormAptTime('12:00');
+      setFormAptIsAllDay(false);
       setFormAptPlace(evt.place || '');
       setFormAptIsPrivate(false);
     } else {
@@ -734,7 +723,8 @@ export default function App() {
       setFormTripEnd(evt.date || selectedDay);
       setFormTripColor(evt.color || 'blue');
       setFormAptTitle(evt.title || '');
-      setFormAptTime(evt.time || '12:00');
+      setFormAptTime(evt.time || '');
+      setFormAptIsAllDay(!evt.time);
       setFormAptPlace(evt.place || '');
       setFormAptIsPrivate(evt.isPrivate || false);
       setFormAptDisplayMode(evt.displayMode || 'dot');
@@ -1138,6 +1128,8 @@ export default function App() {
               aptViewMode={aptViewMode}
               onMoveEvent={handleMoveEvent}
               memos={memos}
+              todos={todos}
+              setTodos={setTodos}
               onSelectDay={(dateStr) => {
                 setSelectedDay(dateStr);
                 const parts = dateStr.split('-');
@@ -1523,22 +1515,6 @@ export default function App() {
                   display: 'flex', gap: '8px', justifyContent: 'flex-end',
                   borderTop: '1px solid var(--border-color)'
                 }}>
-                  <button
-                    onClick={() => {
-                      setViewTarget(null);
-                      handleDeleteEvent(evt.id);
-                    }}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '5px',
-                      padding: '8px 14px', borderRadius: '8px',
-                      backgroundColor: '#fee2e2', color: '#ef4444',
-                      border: '1px solid #fca5a5', cursor: 'pointer',
-                      fontSize: '13px', fontWeight: '600'
-                    }}
-                  >
-                    <Trash2 size={13} />
-                    삭제
-                  </button>
                   <button
                     onClick={() => {
                       setViewTarget(null);
@@ -1976,14 +1952,48 @@ export default function App() {
                     <>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                         <div className="settings-form-row">
-                          <span className="settings-label">시간</span>
-                          <input 
-                            type="time" 
-                            className="input-text" 
-                            value={formAptTime}
-                            onChange={(e) => setFormAptTime(e.target.value)}
-                            required 
-                        />
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                            <span className="settings-label" style={{ margin: 0 }}>시간</span>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '750', color: 'var(--text-main)', cursor: 'pointer' }}>
+                              <input 
+                                type="checkbox"
+                                checked={formAptIsAllDay}
+                                onChange={(e) => {
+                                  setFormAptIsAllDay(e.target.checked);
+                                  if (e.target.checked) {
+                                    setFormAptTime('');
+                                  } else {
+                                    setFormAptTime('12:00');
+                                  }
+                                }}
+                              />
+                              <span>하루종일</span>
+                            </label>
+                          </div>
+                          {!formAptIsAllDay ? (
+                            <input 
+                              type="time" 
+                              className="input-text" 
+                              value={formAptTime}
+                              onChange={(e) => setFormAptTime(e.target.value)}
+                              required 
+                            />
+                          ) : (
+                            <div style={{ 
+                              height: '35px', 
+                              backgroundColor: 'var(--bg-app)', 
+                              border: '1.5px solid var(--border-color)', 
+                              borderRadius: 'var(--radius-sm)', 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              paddingLeft: '10px', 
+                              fontSize: '11.5px', 
+                              color: 'var(--text-muted)',
+                              fontWeight: '600'
+                            }}>
+                              하루 종일 (시간 미지정)
+                            </div>
+                          )}
                         </div>
                         <div className="settings-form-row">
                           <span className="settings-label">장소</span>

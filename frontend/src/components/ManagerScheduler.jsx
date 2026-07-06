@@ -14,7 +14,7 @@ import {
   ToggleLeft,
   Calendar,
   AlertCircle,
-  Settings
+  Settings, Paintbrush
 } from 'lucide-react';
 
 export default function ManagerScheduler({ 
@@ -26,7 +26,9 @@ export default function ManagerScheduler({
   // 1. Core States
   const [selectedYear, setSelectedYear] = useState(() => currentDate ? currentDate.getFullYear() : new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(() => currentDate ? currentDate.getMonth() + 1 : new Date().getMonth() + 1);
-  const [selectedBrush, setSelectedBrush] = useState(null); // The shift type selected to "paint" onto cells
+  const [selectedBrush, setSelectedBrush] = useState(null);
+  const [showStaffManagerModal, setShowStaffManagerModal] = useState(false);
+  const [showBrushManagerModal, setShowBrushManagerModal] = useState(false); // The shift type selected to "paint" onto cells
 
   // 2. Staff State with Qualitative constraints (avoidWith, specialNote, specialRequests)
   const [staffList, setStaffList] = useState(() => {
@@ -1498,6 +1500,69 @@ export default function ManagerScheduler({
           gap: 24px;
         }
 
+        /* Modal Styles */
+        .custom-modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: rgba(0, 0, 0, 0.4);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+        }
+
+        .custom-modal-content {
+          background-color: #ffffff;
+          border-radius: var(--radius-md);
+          padding: 24px;
+          box-shadow: var(--shadow-lg);
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          max-height: 90vh;
+          overflow-y: auto;
+          animation: popScale 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .custom-modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          border-bottom: 1px solid var(--border-color);
+          padding-bottom: 12px;
+        }
+
+        .custom-modal-title {
+          font-size: 14px;
+          font-weight: 800;
+          color: var(--text-main);
+          margin: 0;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .custom-modal-close {
+          border: none;
+          background: none;
+          color: var(--text-muted);
+          cursor: pointer;
+          font-size: 14px;
+          font-weight: 800;
+          padding: 2px 6px;
+          border-radius: 4px;
+          transition: all 0.15s;
+        }
+        
+        .custom-modal-close:hover {
+          background-color: #f1f5f9;
+          color: var(--text-main);
+        }
+
         /* Left Panel - Staff Management */
         .staff-panel {
           background-color: var(--bg-app);
@@ -1829,9 +1894,9 @@ export default function ManagerScheduler({
           </div>
         </div>
 
-        <div className="scheduler-controls" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="scheduler-controls" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
           {/* Month Selector */}
-          <div className="month-selector">
+          <div className="month-selector" style={{ marginRight: '8px' }}>
             <button onClick={handlePrevMonth} className="arrow-btn" title="이전달">
               <ChevronLeft size={16} />
             </button>
@@ -1843,681 +1908,133 @@ export default function ManagerScheduler({
             </button>
           </div>
 
+          {/* Inline Brush Selector */}
+          <div className="brush-selector" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', marginRight: '4px' }}>
+            <span style={{ fontSize: '11.5px', fontWeight: '800', color: 'var(--text-muted)', marginRight: '2px' }}>
+              🎨 브러시:
+            </span>
+            {currentShifts.map(s => {
+              const isActive = selectedBrush === s.id;
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setSelectedBrush(s.id)}
+                  className={`brush-btn ${isActive ? 'active' : ''}`}
+                  style={{
+                    backgroundColor: s.bg,
+                    color: s.color,
+                    border: isActive ? `2.5px solid ${s.color}` : '1.5px solid var(--border-color)',
+                    padding: '4px 10px',
+                    fontSize: '11.5px',
+                    borderRadius: '6px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    cursor: 'pointer',
+                    height: '28px',
+                    boxSizing: 'border-box',
+                    transition: 'all 0.15s',
+                    fontWeight: isActive ? '800' : '500'
+                  }}
+                >
+                  <span className="shift-badge" style={{ backgroundColor: s.color, color: '#fff', width: '16px', height: '16px', fontSize: '8px', borderRadius: '3px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {s.code}
+                  </span>
+                  <span>{s.label}</span>
+                </button>
+              );
+            })}
+            
+            {/* Brush Edit Button */}
+            <button 
+              type="button"
+              onClick={() => setShowBrushManagerModal(true)}
+              className="arrow-btn"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+                color: showBrushManagerModal ? 'var(--primary)' : 'var(--text-muted)',
+                borderColor: showBrushManagerModal ? 'var(--primary)' : 'var(--border-color)',
+                backgroundColor: showBrushManagerModal ? 'var(--primary-light)' : '#ffffff',
+                padding: '0 12px',
+                height: '32px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                border: '1.5px solid var(--border-color)',
+                fontSize: '12px',
+                fontWeight: '800',
+                transition: 'all 0.15s'
+              }}
+              title="브러시 추가/편집 설정"
+            >
+              <Paintbrush size={14} />
+              <span>브러시 설정</span>
+            </button>
+          </div>
+
+          {/* Icon control buttons */}
           <button 
             type="button"
-            onClick={() => setShowRulesPanel(prev => !prev)} 
+            onClick={() => setShowStaffManagerModal(true)} 
             className="arrow-btn" 
             style={{ 
               display: 'flex', 
               alignItems: 'center', 
               justifyContent: 'center', 
-              color: showRulesPanel ? 'var(--primary)' : 'var(--text-muted)', 
-              borderColor: showRulesPanel ? 'var(--primary)' : 'var(--border-color)',
-              backgroundColor: showRulesPanel ? 'var(--primary-light)' : 'transparent',
-              width: '32px',
+              gap: '6px',
+              color: showStaffManagerModal ? 'var(--primary)' : 'var(--text-muted)', 
+              borderColor: showStaffManagerModal ? 'var(--primary)' : 'var(--border-color)',
+              backgroundColor: showStaffManagerModal ? 'var(--primary-light)' : '#ffffff',
+              padding: '0 12px',
               height: '32px',
               borderRadius: '6px',
               cursor: 'pointer',
               border: '1.5px solid var(--border-color)',
+              fontSize: '12px',
+              fontWeight: '800',
+              transition: 'all 0.15s'
+            }} 
+            title="근무 조원 관리"
+          >
+            <UserCheck size={14} />
+            <span>조원 관리</span>
+          </button>
+
+          <button 
+            type="button"
+            onClick={() => setShowRulesPanel(true)} 
+            className="arrow-btn" 
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              gap: '6px',
+              color: showRulesPanel ? 'var(--primary)' : 'var(--text-muted)', 
+              borderColor: showRulesPanel ? 'var(--primary)' : 'var(--border-color)',
+              backgroundColor: showRulesPanel ? 'var(--primary-light)' : '#ffffff',
+              padding: '0 12px',
+              height: '32px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              border: '1.5px solid var(--border-color)',
+              fontSize: '12px',
+              fontWeight: '800',
               transition: 'all 0.15s'
             }} 
             title="근무 환경 및 규정 설정"
           >
-            <Settings size={16} />
+            <Settings size={14} />
+            <span>근무 규정 설정</span>
           </button>
         </div>
       </div>
 
       <div className="scheduler-main-layout">
 
-        {/* 근무 조원 관리 패널 (배정표 아래로 order:2) */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', order: 2 }}>
-          <div className="staff-panel">
-            <div className="staff-list-title">
-              <UserCheck size={16} color="var(--primary)" />
-              <span>근무 조원 관리 ({staffList.length}명)</span>
-            </div>
-
-            {/* Add Staff Form */}
-            <form onSubmit={handleAddStaff} className="staff-form" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px', width: '100%' }}>
-                <input 
-                  type="text" 
-                  value={newStaffName}
-                  onChange={(e) => setNewStaffName(e.target.value)}
-                  placeholder="조원 이름 입력"
-                  className="input-text"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    fontSize: '12px',
-                    borderRadius: '6px',
-                    border: '1.5px solid var(--border-color)',
-                    outline: 'none'
-                  }}
-                  required
-                />
-                <input 
-                  type="text" 
-                  value={newStaffTeam}
-                  onChange={(e) => setNewStaffTeam(e.target.value)}
-                  placeholder="조/팀 (선택)"
-                  className="input-text"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    fontSize: '12px',
-                    borderRadius: '6px',
-                    border: '1.5px solid var(--border-color)',
-                    outline: 'none'
-                  }}
-                />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', width: '100%' }}>
-                <select
-                  value={newStaffRole}
-                  onChange={(e) => {
-                    if (e.target.value === '___manage_roles___') {
-                      setShowRoleManagerModal(true);
-                    } else {
-                      setNewStaffRole(e.target.value);
-                    }
-                  }}
-                  className="scheduler-select-btn"
-                >
-                  {customRoles.map(role => (
-                    <option key={role} value={role}>{role}</option>
-                  ))}
-                  <option value="___manage_roles___">역할 추가/수정/삭제...</option>
-                </select>
-
-                <select
-                  value={newStaffExpLevel}
-                  onChange={(e) => {
-                    if (e.target.value === '___manage_exp_levels___') {
-                      setShowExpLevelManagerModal(true);
-                    } else {
-                      setNewStaffExpLevel(e.target.value);
-                    }
-                  }}
-                  className="scheduler-select-btn"
-                >
-                  {customExpLevels.map(lvl => (
-                    <option key={lvl.id} value={lvl.id}>{lvl.label}</option>
-                  ))}
-                  <option value="___manage_exp_levels___">숙련도 구분 설정...</option>
-                </select>
-              </div>
-              <button 
-                type="submit"
-                className="btn-action-solid"
-                style={{
-                  justifyContent: 'center',
-                  padding: '8px',
-                  fontSize: '12px'
-                }}
-              >
-                <Plus size={14} />
-                근무 조원 추가
-              </button>
-            </form>
-
-            {/* Staff Scroll Area */}
-            <div className="staff-scroll-area">
-              {staffList.map(staff => (
-                <div key={staff.id} className="staff-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: staff.color }} />
-                      <div>
-                        <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-main)', display: 'inline-flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
-                          {useTeams && staff.team && (
-                            <span style={{
-                              fontSize: '9px',
-                              padding: '1px 5px',
-                              borderRadius: '4px',
-                              fontWeight: '800',
-                              backgroundColor: '#e0f2fe',
-                              color: '#0369a1',
-                              lineHeight: '1.2'
-                            }}>
-                              {staff.team}
-                            </span>
-                          )}
-                          {staff.name}
-                          <span style={{
-                            fontSize: '9px',
-                            padding: '1px 5px',
-                            borderRadius: '4px',
-                            fontWeight: '800',
-                            backgroundColor: isSenior(staff.expLevel) ? 'var(--primary-light, #eff1fe)' : '#f0fdf4',
-                            color: isSenior(staff.expLevel) ? 'var(--primary, #5e5ff0)' : '#16a34a',
-                            lineHeight: '1.2'
-                          }}>
-                            {customExpLevels.find(l => l.id === staff.expLevel || l.label === staff.expLevel)?.label.split(' ')[0] || staff.expLevel}
-                          </span>
-                        </span>
-                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block' }}>
-                          {staff.role}
-                        </span>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      <button 
-                        type="button"
-                        onClick={() => handleOpenStaffConfig(staff)}
-                        style={{ border: 'none', background: 'none', color: 'var(--primary)', cursor: 'pointer', padding: '4px', fontSize: '12px' }}
-                        title="개인 사정 및 제약 조건 설정"
-                      >
-                        ⚙️
-                      </button>
-                      <button 
-                        type="button"
-                        onClick={() => handleDeleteStaff(staff.id)}
-                        style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
-                        title="조원 삭제"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                  {/* Qualitative Badge Indicators */}
-                  <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', paddingLeft: '18px' }}>
-                    {staff.specialRequests?.nightAvoid && (
-                      <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#fee2e2', color: '#ef4444', fontWeight: '700' }}>
-                        야간제외
-                      </span>
-                    )}
-                    {staff.specialRequests?.weekendOff && (
-                      <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#fef3c7', color: '#d97706', fontWeight: '700' }}>
-                        주말휴무
-                      </span>
-                    )}
-                    {staff.specialRequests?.couplingWith && (
-                      <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#eff6ff', color: '#2563eb', fontWeight: '700' }}>
-                        동행
-                      </span>
-                    )}
-                    {staff.avoidWith && staff.avoidWith.length > 0 && (
-                      <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#f3f4f6', color: '#4b5563', fontWeight: '700' }}>
-                        기피{staff.avoidWith.length}
-                      </span>
-                    )}
-                    {staff.specialNote && (
-                      <span 
-                        style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#faf5ff', color: '#7c3aed', fontWeight: '700', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} 
-                        title={staff.specialNote}
-                      >
-                        📝 {staff.specialNote}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {staffList.length === 0 && (
-                <div style={{ padding: '20px 10px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
-                  등록된 조원이 없습니다.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Ward Rules Panel */}
-          {showRulesPanel && (
-            <div className="rules-panel" style={{
-              backgroundColor: 'var(--bg-app)',
-              border: '1px solid var(--border-color)',
-              borderRadius: 'var(--radius-md)',
-              padding: '20px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '14px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '14px' }}>⚙️</span>
-                  <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)' }}>근무 환경 및 규정 설정</span>
-                </div>
-                <button 
-                  type="button"
-                  onClick={() => setShowRulesPanel(false)}
-                  style={{
-                    border: 'none',
-                    background: 'none',
-                    color: 'var(--text-muted)',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: '800',
-                    padding: '2px 6px',
-                    borderRadius: '4px',
-                    transition: 'all 0.15s'
-                  }}
-                  onMouseEnter={(e) => { e.target.style.backgroundColor = '#f1f5f9'; e.target.style.color = 'var(--text-main)'; }}
-                  onMouseLeave={(e) => { e.target.style.backgroundColor = 'transparent'; e.target.style.color = 'var(--text-muted)'; }}
-                  title="설정 닫기"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* Max Consecutive Work */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>최대 연속 근무</span>
-                  <span style={{ color: 'var(--primary)', fontWeight: '800' }}>{wardRules.maxConsecutiveWork}일</span>
-                </div>
-                <input
-                  type="range"
-                  min={3}
-                  max={7}
-                  value={wardRules.maxConsecutiveWork}
-                  onChange={(e) => setWardRules(prev => ({ ...prev, maxConsecutiveWork: parseInt(e.target.value) }))}
-                  style={{ width: '100%', cursor: 'pointer' }}
-                />
-              </div>
-
-              {/* Max Weekly Work Days */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>주간 근무 한도 (법정)</span>
-                  <span style={{ color: 'var(--primary)', fontWeight: '800' }}>{wardRules.maxWeeklyWorkDays}일</span>
-                </div>
-                <input
-                  type="range"
-                  min={4}
-                  max={6}
-                  value={wardRules.maxWeeklyWorkDays}
-                  onChange={(e) => setWardRules(prev => ({ ...prev, maxWeeklyWorkDays: parseInt(e.target.value) }))}
-                  style={{ width: '100%', cursor: 'pointer' }}
-                />
-              </div>
-
-              {/* Max Weekly Work Hours */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>최대 주간 근로시간</span>
-                  <span style={{ color: 'var(--primary)', fontWeight: '800' }}>{wardRules.maxWeeklyWorkHours}시간</span>
-                </div>
-                <input
-                  type="range"
-                  min={40}
-                  max={60}
-                  value={wardRules.maxWeeklyWorkHours}
-                  onChange={(e) => setWardRules(prev => ({ ...prev, maxWeeklyWorkHours: parseInt(e.target.value) }))}
-                  style={{ width: '100%', cursor: 'pointer' }}
-                />
-              </div>
-
-              {/* Min Rest After Night */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>야간 근무 후 휴식 일수</span>
-                  <span style={{ color: 'var(--primary)', fontWeight: '800' }}>{wardRules.minRestAfterNight}일</span>
-                </div>
-                <input
-                  type="range"
-                  min={1}
-                  max={2}
-                  value={wardRules.minRestAfterNight}
-                  onChange={(e) => setWardRules(prev => ({ ...prev, minRestAfterNight: parseInt(e.target.value) }))}
-                  style={{ width: '100%', cursor: 'pointer' }}
-                />
-              </div>
-
-              <hr style={{ border: 'none', borderTop: '1px dashed var(--border-color)', margin: '4px 0' }} />
-
-              {/* Toggles */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={wardRules.protectJuniors}
-                    onChange={(e) => setWardRules(prev => ({ ...prev, protectJuniors: e.target.checked }))}
-                  />
-                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>🛡️ 신규 보호 (경력직 1인 조화)</span>
-                </label>
-
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={wardRules.avoidConflict}
-                    onChange={(e) => setWardRules(prev => ({ ...prev, avoidConflict: e.target.checked }))}
-                  />
-                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>🚫 갈등 조원 자동 분리</span>
-                </label>
-
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={wardRules.matchPreceptors}
-                    onChange={(e) => setWardRules(prev => ({ ...prev, matchPreceptors: e.target.checked }))}
-                  />
-                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>🤝 사수-부사수 동행 스케줄</span>
-                </label>
-
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={useTeams}
-                    onChange={(e) => setUseTeams(e.target.checked)}
-                  />
-                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>👥 팀(조) 구분 및 표시 활성화</span>
-                </label>
-              </div>
-
-              <hr style={{ border: 'none', borderTop: '1px dashed var(--border-color)', margin: '4px 0' }} />
-
-              {/* Custom Roles Manager */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <span style={{ fontSize: '12px', fontWeight: '850', color: 'var(--text-main)' }}>📋 역할/직급 목록 관리</span>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                  {customRoles.map(r => (
-                    <span
-                      key={r}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontSize: '10.5px',
-                        padding: '2px 8px',
-                        borderRadius: '12px',
-                        backgroundColor: 'var(--primary-light, #eff1fe)',
-                        color: 'var(--primary, #5e5ff0)',
-                        fontWeight: '750'
-                      }}
-                    >
-                      {r}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (customRoles.length <= 1) {
-                            alert('최소 하나의 역할은 존재해야 합니다.');
-                            return;
-                          }
-                          setCustomRoles(prev => prev.filter(role => role !== r));
-                        }}
-                        style={{
-                          border: 'none',
-                          background: 'none',
-                          color: 'var(--primary)',
-                          cursor: 'pointer',
-                          fontSize: '10px',
-                          padding: '0 2px',
-                          fontWeight: '800'
-                        }}
-                        title="역할 삭제"
-                      >
-                        ✕
-                      </button>
-                    </span>
-                  ))}
-                </div>
-                
-                <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
-                  <input
-                    type="text"
-                    id="new-role-input"
-                    placeholder="새 역할 입력 (예: 카운터)"
-                    style={{
-                      flex: 1,
-                      padding: '6px 8px',
-                      fontSize: '11px',
-                      borderRadius: '6px',
-                      border: '1.5px solid var(--border-color)',
-                      outline: 'none',
-                      backgroundColor: '#ffffff'
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const val = e.target.value.trim();
-                        if (!val) return;
-                        if (customRoles.includes(val)) {
-                          alert('이미 존재하는 역할입니다.');
-                          return;
-                        }
-                        setCustomRoles(prev => [...prev, val]);
-                        e.target.value = '';
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const input = document.getElementById('new-role-input');
-                      const val = input ? input.value.trim() : '';
-                      if (!val) return;
-                      if (customRoles.includes(val)) {
-                        alert('이미 존재하는 역할입니다.');
-                        return;
-                      }
-                      setCustomRoles(prev => [...prev, val]);
-                      if (input) input.value = '';
-                    }}
-                    className="btn-action-solid"
-                    style={{
-                      padding: '4px 10px',
-                      fontSize: '11px',
-                      borderRadius: '6px',
-                      height: 'auto'
-                    }}
-                  >
-                    추가
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* 배정표 (Roster Grid) - order:1로 위에 표시 */}
-        <div className="grid-panel" style={{ order: 1 }}>
-          {/* Shift Palette Brush Selector */}
-          <div className="palette-container" style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'stretch' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-              <div className="brush-selector" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                <span style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-muted)', marginRight: '6px' }}>
-                  🎨 배정 브러시 선택:
-                </span>
-                {currentShifts.map(s => {
-                  const isActive = selectedBrush === s.id;
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => setSelectedBrush(s.id)}
-                      className={`brush-btn ${isActive ? 'active' : ''}`}
-                      style={{
-                        backgroundColor: s.bg,
-                        color: s.color,
-                        border: isActive ? `2px solid ${s.color}` : '2px solid transparent'
-                      }}
-                    >
-                      <span className="shift-badge" style={{ backgroundColor: s.color, color: '#fff', width: '18px', height: '18px', fontSize: '9px', borderRadius: '4px' }}>
-                        {s.code}
-                      </span>
-                      <span>{s.label} <small style={{ fontSize: '9px', opacity: 0.8 }}>({s.start})</small></span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowBrushEditor(!showBrushEditor)}
-                className="btn-action-outline"
-                style={{ padding: '6px 12px', fontSize: '12px', height: '32px', borderColor: 'var(--primary)', color: 'var(--primary)' }}
-              >
-                ⚙️ 브러시 편집
-              </button>
-            </div>
-            
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'var(--text-muted)', backgroundColor: '#fff', padding: '6px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', lineHeight: '1.4' }}>
-              <AlertCircle size={14} color="var(--primary)" />
-              <span><strong>💡 희망 오프 연동:</strong> 먼저 브러시로 <strong>'Off / 휴무'</strong>를 선택해 표의 원하는 칸에 칠해둔 뒤 <strong>[자동 스케줄 배정 (AI)]</strong>을 실행하면, 해당 오프 일정을 유지한 상태로 최적화 근무표를 편성합니다.</span>
-            </div>
-
-            {/* Brush Manager Panel */}
-            {showBrushEditor && (
-              <div style={{
-                backgroundColor: 'var(--bg-app)',
-                borderRadius: '8px',
-                border: '1px solid var(--border-color)',
-                padding: '16px',
-                display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
-                gap: '20px',
-                animation: 'fadeIn 0.2s ease',
-                alignItems: 'start'
-              }}>
-                {/* Left: List */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <h4 style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 4px 0' }}>등록된 브러시 목록 ({currentShifts.length}개)</h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto', paddingRight: '4px' }}>
-                    {currentShifts.map(s => (
-                      <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ backgroundColor: s.color, color: '#ffffff', fontWeight: '850', fontSize: '10px', width: '22px', height: '22px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            {s.code}
-                          </span>
-                          <div>
-                            <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>{s.label}</span>
-                            <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: '6px' }}>({s.start} ~ {s.end})</span>
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleStartEditShift(s)}
-                            style={{ border: 'none', background: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '11px', fontWeight: '700' }}
-                          >
-                            수정
-                          </button>
-                          {s.id !== 'O' && s.id !== 'OFF' && (
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteShiftType(s.id)}
-                              style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '11px', fontWeight: '700' }}
-                            >
-                              삭제
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Right: Form */}
-                <div style={{ borderLeft: '1px dashed var(--border-color)', paddingLeft: '20px' }}>
-                  <h4 style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 8px 0' }}>
-                    {editingShiftId ? '🎨 브러시 정보 수정' : '➕ 새 근무 브러시 추가'}
-                  </h4>
-                  <form onSubmit={handleSaveShiftType} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '8px' }}>
-                      <div>
-                        <label style={{ fontSize: '10px', fontWeight: '700', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>코드 (최대 4자)</label>
-                        <input
-                          type="text"
-                          maxLength={4}
-                          value={shiftForm.code}
-                          onChange={(e) => setShiftForm(prev => ({ ...prev, code: e.target.value }))}
-                          placeholder="D2, 오"
-                          className="input-text"
-                          style={{ width: '100%', padding: '6px 8px', fontSize: '11.5px', borderRadius: '4px', border: '1px solid var(--border-color)', outline: 'none' }}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '10px', fontWeight: '700', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>브러시 이름</label>
-                        <input
-                          type="text"
-                          value={shiftForm.label}
-                          onChange={(e) => setShiftForm(prev => ({ ...prev, label: e.target.value }))}
-                          placeholder="데이2, 오전업무"
-                          className="input-text"
-                          style={{ width: '100%', padding: '6px 8px', fontSize: '11.5px', borderRadius: '4px', border: '1px solid var(--border-color)', outline: 'none' }}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                      <div>
-                        <label style={{ fontSize: '10px', fontWeight: '700', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>시작 시간</label>
-                        <input
-                          type="time"
-                          value={shiftForm.start}
-                          onChange={(e) => setShiftForm(prev => ({ ...prev, start: e.target.value }))}
-                          className="input-text"
-                          style={{ width: '100%', padding: '6px 8px', fontSize: '11.5px', borderRadius: '4px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: '#fff' }}
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label style={{ fontSize: '10px', fontWeight: '700', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>종료 시간</label>
-                        <input
-                          type="time"
-                          value={shiftForm.end}
-                          onChange={(e) => setShiftForm(prev => ({ ...prev, end: e.target.value }))}
-                          className="input-text"
-                          style={{ width: '100%', padding: '6px 8px', fontSize: '11.5px', borderRadius: '4px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: '#fff' }}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--text-muted)' }}>테마 색상:</span>
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                          {['#16a34a', '#ea580c', '#7c3aed', '#1d4ed8', '#0d9488', '#b91c1c', '#ec4899', '#4b5563'].map(colorHex => (
-                            <div
-                              key={colorHex}
-                              onClick={() => setShiftForm(prev => ({ ...prev, color: colorHex }))}
-                              style={{
-                                width: '15px',
-                                height: '15px',
-                                borderRadius: '50%',
-                                backgroundColor: colorHex,
-                                cursor: 'pointer',
-                                border: shiftForm.color === colorHex ? '2.5px solid #000' : '1.5px solid transparent',
-                                transform: shiftForm.color === colorHex ? 'scale(1.1)' : 'scale(1)',
-                                transition: 'all 0.1s'
-                              }}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                      
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        {editingShiftId && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingShiftId(null);
-                              setShiftForm({ code: '', label: '', color: '#1d4ed8', start: '09:00', end: '18:00' });
-                            }}
-                            className="btn-action-outline"
-                            style={{ padding: '4px 10px', fontSize: '11px', height: '26px' }}
-                          >
-                            취소
-                          </button>
-                        )}
-                        <button
-                          type="submit"
-                          className="btn-action-solid"
-                          style={{ padding: '4px 12px', fontSize: '11px', height: '26px' }}
-                        >
-                          {editingShiftId ? '수정완료' : '추가하기'}
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            )}
-          </div>
-
+        <div className="grid-panel">
           {/* Roster Grid Table */}
           <div className="grid-scroll-wrapper">
             <table className="roster-table" style={{ minWidth: '1450px' }}>
@@ -2848,8 +2365,624 @@ export default function ManagerScheduler({
               저장 및 캘린더 연동하기
             </button>
           </div>
-
         </div>
+
+        {/* Modal 1: Shift Member Management */}
+        {showStaffManagerModal && (
+          <div className="custom-modal-overlay" onClick={() => setShowStaffManagerModal(false)}>
+            <div className="custom-modal-content" onClick={(e) => e.stopPropagation()} style={{ width: '380px' }}>
+              <div className="custom-modal-header">
+                <h4 className="custom-modal-title">
+                  <UserCheck size={16} color="var(--primary)" />
+                  <span>근무 조원 관리</span>
+                </h4>
+                <button type="button" className="custom-modal-close" onClick={() => setShowStaffManagerModal(false)}>✕</button>
+              </div>
+              <div style={{ marginTop: '10px' }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+{/* Add Staff Form */}
+            <form onSubmit={handleAddStaff} className="staff-form" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px', width: '100%' }}>
+                <input 
+                  type="text" 
+                  value={newStaffName}
+                  onChange={(e) => setNewStaffName(e.target.value)}
+                  placeholder="조원 이름 입력"
+                  className="input-text"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    fontSize: '12px',
+                    borderRadius: '6px',
+                    border: '1.5px solid var(--border-color)',
+                    outline: 'none'
+                  }}
+                  required
+                />
+                <input 
+                  type="text" 
+                  value={newStaffTeam}
+                  onChange={(e) => setNewStaffTeam(e.target.value)}
+                  placeholder="조/팀 (선택)"
+                  className="input-text"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    fontSize: '12px',
+                    borderRadius: '6px',
+                    border: '1.5px solid var(--border-color)',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', width: '100%' }}>
+                <select
+                  value={newStaffRole}
+                  onChange={(e) => {
+                    if (e.target.value === '___manage_roles___') {
+                      setShowRoleManagerModal(true);
+                    } else {
+                      setNewStaffRole(e.target.value);
+                    }
+                  }}
+                  className="scheduler-select-btn"
+                >
+                  {customRoles.map(role => (
+                    <option key={role} value={role}>{role}</option>
+                  ))}
+                  <option value="___manage_roles___">역할 추가/수정/삭제...</option>
+                </select>
+
+                <select
+                  value={newStaffExpLevel}
+                  onChange={(e) => {
+                    if (e.target.value === '___manage_exp_levels___') {
+                      setShowExpLevelManagerModal(true);
+                    } else {
+                      setNewStaffExpLevel(e.target.value);
+                    }
+                  }}
+                  className="scheduler-select-btn"
+                >
+                  {customExpLevels.map(lvl => (
+                    <option key={lvl.id} value={lvl.id}>{lvl.label}</option>
+                  ))}
+                  <option value="___manage_exp_levels___">숙련도 구분 설정...</option>
+                </select>
+              </div>
+              <button 
+                type="submit"
+                className="btn-action-solid"
+                style={{
+                  justifyContent: 'center',
+                  padding: '8px',
+                  fontSize: '12px'
+                }}
+              >
+                <Plus size={14} />
+                근무 조원 추가
+              </button>
+            </form>
+
+            {/* Staff Scroll Area */}
+            <div className="staff-scroll-area">
+              {staffList.map(staff => (
+                <div key={staff.id} className="staff-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: staff.color }} />
+                      <div>
+                        <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text-main)', display: 'inline-flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
+                          {useTeams && staff.team && (
+                            <span style={{
+                              fontSize: '9px',
+                              padding: '1px 5px',
+                              borderRadius: '4px',
+                              fontWeight: '800',
+                              backgroundColor: '#e0f2fe',
+                              color: '#0369a1',
+                              lineHeight: '1.2'
+                            }}>
+                              {staff.team}
+                            </span>
+                          )}
+                          {staff.name}
+                          <span style={{
+                            fontSize: '9px',
+                            padding: '1px 5px',
+                            borderRadius: '4px',
+                            fontWeight: '800',
+                            backgroundColor: isSenior(staff.expLevel) ? 'var(--primary-light, #eff1fe)' : '#f0fdf4',
+                            color: isSenior(staff.expLevel) ? 'var(--primary, #5e5ff0)' : '#16a34a',
+                            lineHeight: '1.2'
+                          }}>
+                            {customExpLevels.find(l => l.id === staff.expLevel || l.label === staff.expLevel)?.label.split(' ')[0] || staff.expLevel}
+                          </span>
+                        </span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block' }}>
+                          {staff.role}
+                        </span>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      <button 
+                        type="button"
+                        onClick={() => handleOpenStaffConfig(staff)}
+                        style={{ border: 'none', background: 'none', color: 'var(--primary)', cursor: 'pointer', padding: '4px', fontSize: '12px' }}
+                        title="개인 사정 및 제약 조건 설정"
+                      >
+                        ⚙️
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => handleDeleteStaff(staff.id)}
+                        style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
+                        title="조원 삭제"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  {/* Qualitative Badge Indicators */}
+                  <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', paddingLeft: '18px' }}>
+                    {staff.specialRequests?.nightAvoid && (
+                      <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#fee2e2', color: '#ef4444', fontWeight: '700' }}>
+                        야간제외
+                      </span>
+                    )}
+                    {staff.specialRequests?.weekendOff && (
+                      <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#fef3c7', color: '#d97706', fontWeight: '700' }}>
+                        주말휴무
+                      </span>
+                    )}
+                    {staff.specialRequests?.couplingWith && (
+                      <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#eff6ff', color: '#2563eb', fontWeight: '700' }}>
+                        동행
+                      </span>
+                    )}
+                    {staff.avoidWith && staff.avoidWith.length > 0 && (
+                      <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#f3f4f6', color: '#4b5563', fontWeight: '700' }}>
+                        기피{staff.avoidWith.length}
+                      </span>
+                    )}
+                    {staff.specialNote && (
+                      <span 
+                        style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#faf5ff', color: '#7c3aed', fontWeight: '700', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} 
+                        title={staff.specialNote}
+                      >
+                        📝 {staff.specialNote}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {staffList.length === 0 && (
+                <div style={{ padding: '20px 10px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+                  등록된 조원이 없습니다.
+                </div>
+              )}
+            </div>
+</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal 2: Assignment Brush Selection & Editor */}
+        {showBrushManagerModal && (
+          <div className="custom-modal-overlay" onClick={() => setShowBrushManagerModal(false)}>
+            <div className="custom-modal-content" onClick={(e) => e.stopPropagation()} style={{ width: '680px' }}>
+              <div className="custom-modal-header">
+                <h4 className="custom-modal-title">
+                  <Paintbrush size={16} color="var(--primary)" />
+                  <span>배정 브러시 설정 및 편집</span>
+                </h4>
+                <button type="button" className="custom-modal-close" onClick={() => setShowBrushManagerModal(false)}>✕</button>
+              </div>
+              <div style={{ marginTop: '10px' }}>
+                <div style={{
+                
+                
+                
+                
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '20px',
+                animation: 'fadeIn 0.2s ease',
+                alignItems: 'start'
+              }}>
+                {/* Left: List */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <h4 style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 4px 0' }}>등록된 브러시 목록 ({currentShifts.length}개)</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto', paddingRight: '4px' }}>
+                    {currentShifts.map(s => (
+                      <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: '#ffffff', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ backgroundColor: s.color, color: '#ffffff', fontWeight: '850', fontSize: '10px', width: '22px', height: '22px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {s.code}
+                          </span>
+                          <div>
+                            <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>{s.label}</span>
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: '6px' }}>({s.start} ~ {s.end})</span>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditShift(s)}
+                            style={{ border: 'none', background: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '11px', fontWeight: '700' }}
+                          >
+                            수정
+                          </button>
+                          {s.id !== 'O' && s.id !== 'OFF' && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteShiftType(s.id)}
+                              style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '11px', fontWeight: '700' }}
+                            >
+                              삭제
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Right: Form */}
+                <div style={{ borderLeft: '1px dashed var(--border-color)', paddingLeft: '20px' }}>
+                  <h4 style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 8px 0' }}>
+                    {editingShiftId ? '🎨 브러시 정보 수정' : '➕ 새 근무 브러시 추가'}
+                  </h4>
+                  <form onSubmit={handleSaveShiftType} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '8px' }}>
+                      <div>
+                        <label style={{ fontSize: '10px', fontWeight: '700', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>코드 (최대 4자)</label>
+                        <input
+                          type="text"
+                          maxLength={4}
+                          value={shiftForm.code}
+                          onChange={(e) => setShiftForm(prev => ({ ...prev, code: e.target.value }))}
+                          placeholder="D2, 오"
+                          className="input-text"
+                          style={{ width: '100%', padding: '6px 8px', fontSize: '11.5px', borderRadius: '4px', border: '1px solid var(--border-color)', outline: 'none' }}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '10px', fontWeight: '700', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>브러시 이름</label>
+                        <input
+                          type="text"
+                          value={shiftForm.label}
+                          onChange={(e) => setShiftForm(prev => ({ ...prev, label: e.target.value }))}
+                          placeholder="데이2, 오전업무"
+                          className="input-text"
+                          style={{ width: '100%', padding: '6px 8px', fontSize: '11.5px', borderRadius: '4px', border: '1px solid var(--border-color)', outline: 'none' }}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <div>
+                        <label style={{ fontSize: '10px', fontWeight: '700', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>시작 시간</label>
+                        <input
+                          type="time"
+                          value={shiftForm.start}
+                          onChange={(e) => setShiftForm(prev => ({ ...prev, start: e.target.value }))}
+                          className="input-text"
+                          style={{ width: '100%', padding: '6px 8px', fontSize: '11.5px', borderRadius: '4px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: '#fff' }}
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '10px', fontWeight: '700', color: 'var(--text-muted)', display: 'block', marginBottom: '2px' }}>종료 시간</label>
+                        <input
+                          type="time"
+                          value={shiftForm.end}
+                          onChange={(e) => setShiftForm(prev => ({ ...prev, end: e.target.value }))}
+                          className="input-text"
+                          style={{ width: '100%', padding: '6px 8px', fontSize: '11.5px', borderRadius: '4px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: '#fff' }}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--text-muted)' }}>테마 색상:</span>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          {['#16a34a', '#ea580c', '#7c3aed', '#1d4ed8', '#0d9488', '#b91c1c', '#ec4899', '#4b5563'].map(colorHex => (
+                            <div
+                              key={colorHex}
+                              onClick={() => setShiftForm(prev => ({ ...prev, color: colorHex }))}
+                              style={{
+                                width: '15px',
+                                height: '15px',
+                                borderRadius: '50%',
+                                backgroundColor: colorHex,
+                                cursor: 'pointer',
+                                border: shiftForm.color === colorHex ? '2.5px solid #000' : '1.5px solid transparent',
+                                transform: shiftForm.color === colorHex ? 'scale(1.1)' : 'scale(1)',
+                                transition: 'all 0.1s'
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        {editingShiftId && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingShiftId(null);
+                              setShiftForm({ code: '', label: '', color: '#1d4ed8', start: '09:00', end: '18:00' });
+                            }}
+                            className="btn-action-outline"
+                            style={{ padding: '4px 10px', fontSize: '11px', height: '26px' }}
+                          >
+                            취소
+                          </button>
+                        )}
+                        <button
+                          type="submit"
+                          className="btn-action-solid"
+                          style={{ padding: '4px 12px', fontSize: '11px', height: '26px' }}
+                        >
+                          {editingShiftId ? '수정완료' : '추가하기'}
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              </div>
+     
+              </div>
+            </div>
+          </div>
+        )}        {/* Modal 3: Regulations Settings */}
+        {showRulesPanel && (
+          <div className="custom-modal-overlay" onClick={() => setShowRulesPanel(false)}>
+            <div className="custom-modal-content" onClick={(e) => e.stopPropagation()} style={{ width: '420px' }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '14px' }}>⚙️</span>
+                  <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)' }}>근무 환경 및 규정 설정</span>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setShowRulesPanel(false)}
+                  style={{
+                    border: 'none',
+                    background: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '800',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    transition: 'all 0.15s'
+                  }}
+                  onMouseEnter={(e) => { e.target.style.backgroundColor = '#f1f5f9'; e.target.style.color = 'var(--text-main)'; }}
+                  onMouseLeave={(e) => { e.target.style.backgroundColor = 'transparent'; e.target.style.color = 'var(--text-muted)'; }}
+                  title="설정 닫기"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Max Consecutive Work */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>최대 연속 근무</span>
+                  <span style={{ color: 'var(--primary)', fontWeight: '800' }}>{wardRules.maxConsecutiveWork}일</span>
+                </div>
+                <input
+                  type="range"
+                  min={3}
+                  max={7}
+                  value={wardRules.maxConsecutiveWork}
+                  onChange={(e) => setWardRules(prev => ({ ...prev, maxConsecutiveWork: parseInt(e.target.value) }))}
+                  style={{ width: '100%', cursor: 'pointer' }}
+                />
+              </div>
+
+              {/* Max Weekly Work Days */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>주간 근무 한도 (법정)</span>
+                  <span style={{ color: 'var(--primary)', fontWeight: '800' }}>{wardRules.maxWeeklyWorkDays}일</span>
+                </div>
+                <input
+                  type="range"
+                  min={4}
+                  max={6}
+                  value={wardRules.maxWeeklyWorkDays}
+                  onChange={(e) => setWardRules(prev => ({ ...prev, maxWeeklyWorkDays: parseInt(e.target.value) }))}
+                  style={{ width: '100%', cursor: 'pointer' }}
+                />
+              </div>
+
+              {/* Max Weekly Work Hours */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>최대 주간 근로시간</span>
+                  <span style={{ color: 'var(--primary)', fontWeight: '800' }}>{wardRules.maxWeeklyWorkHours}시간</span>
+                </div>
+                <input
+                  type="range"
+                  min={40}
+                  max={60}
+                  value={wardRules.maxWeeklyWorkHours}
+                  onChange={(e) => setWardRules(prev => ({ ...prev, maxWeeklyWorkHours: parseInt(e.target.value) }))}
+                  style={{ width: '100%', cursor: 'pointer' }}
+                />
+              </div>
+
+              {/* Min Rest After Night */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>야간 근무 후 휴식 일수</span>
+                  <span style={{ color: 'var(--primary)', fontWeight: '800' }}>{wardRules.minRestAfterNight}일</span>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={2}
+                  value={wardRules.minRestAfterNight}
+                  onChange={(e) => setWardRules(prev => ({ ...prev, minRestAfterNight: parseInt(e.target.value) }))}
+                  style={{ width: '100%', cursor: 'pointer' }}
+                />
+              </div>
+
+              <hr style={{ border: 'none', borderTop: '1px dashed var(--border-color)', margin: '4px 0' }} />
+
+              {/* Toggles */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={wardRules.protectJuniors}
+                    onChange={(e) => setWardRules(prev => ({ ...prev, protectJuniors: e.target.checked }))}
+                  />
+                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>🛡️ 신규 보호 (경력직 1인 조화)</span>
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={wardRules.avoidConflict}
+                    onChange={(e) => setWardRules(prev => ({ ...prev, avoidConflict: e.target.checked }))}
+                  />
+                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>🚫 갈등 조원 자동 분리</span>
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={wardRules.matchPreceptors}
+                    onChange={(e) => setWardRules(prev => ({ ...prev, matchPreceptors: e.target.checked }))}
+                  />
+                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>🤝 사수-부사수 동행 스케줄</span>
+                </label>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={useTeams}
+                    onChange={(e) => setUseTeams(e.target.checked)}
+                  />
+                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>👥 팀(조) 구분 및 표시 활성화</span>
+                </label>
+              </div>
+
+              <hr style={{ border: 'none', borderTop: '1px dashed var(--border-color)', margin: '4px 0' }} />
+
+              {/* Custom Roles Manager */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <span style={{ fontSize: '12px', fontWeight: '850', color: 'var(--text-main)' }}>📋 역할/직급 목록 관리</span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {customRoles.map(r => (
+                    <span
+                      key={r}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '10.5px',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        backgroundColor: 'var(--primary-light, #eff1fe)',
+                        color: 'var(--primary, #5e5ff0)',
+                        fontWeight: '750'
+                      }}
+                    >
+                      {r}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (customRoles.length <= 1) {
+                            alert('최소 하나의 역할은 존재해야 합니다.');
+                            return;
+                          }
+                          setCustomRoles(prev => prev.filter(role => role !== r));
+                        }}
+                        style={{
+                          border: 'none',
+                          background: 'none',
+                          color: 'var(--primary)',
+                          cursor: 'pointer',
+                          fontSize: '10px',
+                          padding: '0 2px',
+                          fontWeight: '800'
+                        }}
+                        title="역할 삭제"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                
+                <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
+                  <input
+                    type="text"
+                    id="new-role-input"
+                    placeholder="새 역할 입력 (예: 카운터)"
+                    style={{
+                      flex: 1,
+                      padding: '6px 8px',
+                      fontSize: '11px',
+                      borderRadius: '6px',
+                      border: '1.5px solid var(--border-color)',
+                      outline: 'none',
+                      backgroundColor: '#ffffff'
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const val = e.target.value.trim();
+                        if (!val) return;
+                        if (customRoles.includes(val)) {
+                          alert('이미 존재하는 역할입니다.');
+                          return;
+                        }
+                        setCustomRoles(prev => [...prev, val]);
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const input = document.getElementById('new-role-input');
+                      const val = input ? input.value.trim() : '';
+                      if (!val) return;
+                      if (customRoles.includes(val)) {
+                        alert('이미 존재하는 역할입니다.');
+                        return;
+                      }
+                      setCustomRoles(prev => [...prev, val]);
+                      if (input) input.value = '';
+                    }}
+                    className="btn-action-solid"
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '11px',
+                      borderRadius: '6px',
+                      height: 'auto'
+                    }}
+                  >
+                    추가
+                  </button>
+                </div>
+              </div>
+</div>
+            </div>
+          </div>
+        )}
 
       </div>
 
