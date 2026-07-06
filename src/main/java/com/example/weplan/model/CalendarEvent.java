@@ -29,6 +29,9 @@ public class CalendarEvent {
     
     // Shift-specific fields
     private String shiftType; // e.g. "day", "eve", "night"
+    private Boolean isManagerScheduled;
+    private String staffName;
+    private String label;
     
     // Appointment / Trip specific fields
     private String title;

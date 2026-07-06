@@ -5,6 +5,7 @@ import SidebarRight from './components/SidebarRight';
 import SettingsPanels from './components/SettingsPanels';
 import StatsDashboard from './components/StatsDashboard';
 import RecordsBoard from './components/RecordsBoard';
+import ManagerScheduler from './components/ManagerScheduler';
 
 import { 
   Plus, 
@@ -220,6 +221,10 @@ export default function App() {
   });
   const [showRightSidebar, setShowRightSidebar] = useState(() => {
     const saved = localStorage.getItem('weplan_show_right_sidebar');
+    return saved !== 'false';
+  });
+  const [showLeftSidebar, setShowLeftSidebar] = useState(() => {
+    const saved = localStorage.getItem('weplan_show_left_sidebar');
     return saved !== 'false';
   });
   const [isDragging, setIsDragging] = useState(false);
@@ -560,10 +565,6 @@ export default function App() {
     if (currentTab === 'calendar') {
       setCalendarPerspective('me');
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else if (currentTab === 'schedule') {
-      setCurrentTab('calendar');
-      setSettingsModalTab('schedule');
-      setShowSettingsModal(true);
     } else if (currentTab === 'alarm') {
       setCurrentTab('calendar');
       setSettingsModalTab('alarm');
@@ -578,6 +579,11 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('weplan_show_right_sidebar', showRightSidebar);
   }, [showRightSidebar]);
+
+  useEffect(() => {
+    localStorage.setItem('weplan_show_left_sidebar', showLeftSidebar);
+  }, [showLeftSidebar]);
+
 
   const handleMouseDown = (e) => {
     e.preventDefault();
@@ -950,32 +956,37 @@ export default function App() {
   return (
     <div 
       className={`app-container ${
-        currentTab === 'settings' || currentTab === 'stats' 
+        currentTab === 'settings' || currentTab === 'stats' || currentTab === 'schedule'
           ? 'settings-active' 
           : ''
       }`}
       style={{
-        '--right-sidebar-width': showRightSidebar ? `${rightSidebarWidth}px` : '0px'
+        '--left-sidebar-width': showLeftSidebar ? '240px' : '0px',
+        '--right-sidebar-width': (showRightSidebar && currentTab !== 'settings' && currentTab !== 'stats' && currentTab !== 'schedule') ? `${rightSidebarWidth}px` : '0px'
       }}
     >
       {/* 3. Left Sidebar Navigation */}
-      <SidebarLeft 
-        currentTab={currentTab} 
-        setCurrentTab={setCurrentTab} 
-        sharedUsers={sharedUsers}
-        onInviteFriend={handleInviteFriend}
-        isPrivateMode={isPrivateMode}
-        userName={userName}
-        setUserName={setUserName}
-        userJob={userJob}
-        setUserJob={setUserJob}
-        calendarPerspective={calendarPerspective}
-        setCalendarPerspective={setCalendarPerspective}
-      />
+      {showLeftSidebar && (
+        <SidebarLeft 
+          currentTab={currentTab} 
+          setCurrentTab={setCurrentTab} 
+          sharedUsers={sharedUsers}
+          onInviteFriend={handleInviteFriend}
+          isPrivateMode={isPrivateMode}
+          userName={userName}
+          setUserName={setUserName}
+          userJob={userJob}
+          setUserJob={setUserJob}
+          calendarPerspective={calendarPerspective}
+          setCalendarPerspective={setCalendarPerspective}
+          showLeftSidebar={showLeftSidebar}
+          setShowLeftSidebar={setShowLeftSidebar}
+        />
+      )}
 
 
       {/* 1. Right Sidebar Detail */}
-      {currentTab !== 'settings' && currentTab !== 'stats' && showRightSidebar && (
+      {currentTab !== 'settings' && currentTab !== 'stats' && currentTab !== 'schedule' && showRightSidebar && (
         <div className="sidebar-right-container" style={{ height: '100vh', position: 'sticky', top: 0 }}>
           <div 
             className={`resize-handle-v ${isDragging ? 'dragging' : ''}`}
@@ -1002,8 +1013,38 @@ export default function App() {
         </div>
       )}
 
-      {/* 2. Main Center Body */}
-      <main className="main-content">
+      <main className="main-content" style={{ position: 'relative' }}>
+        {!showLeftSidebar && (
+          <button 
+            type="button"
+            onClick={() => setShowLeftSidebar(true)}
+            style={{
+              position: 'absolute',
+              top: '16px',
+              left: '16px',
+              zIndex: 999,
+              backgroundColor: 'var(--bg-card)',
+              border: '1px solid var(--border-color)',
+              borderRadius: '8px',
+              width: '36px',
+              height: '36px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              boxShadow: 'var(--shadow-md)',
+              color: 'var(--text-main)',
+              transition: 'all 0.2s ease',
+            }}
+            title="메뉴 펼치기"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+        )}
         {currentTab === 'settings' ? (
           <div className="settings-page-wrapper fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '20px 0' }}>
             <div className="settings-header" style={{ display: 'flex', flexDirection: 'column', gap: '4px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
@@ -1037,6 +1078,13 @@ export default function App() {
               />
             </div>
           </div>
+        ) : currentTab === 'schedule' ? (
+          <ManagerScheduler 
+            currentDate={currentDate}
+            events={events}
+            setEvents={setEvents}
+            shifts={shifts}
+          />
         ) : currentTab === 'stats' ? (
           <StatsDashboard 
             events={events}

@@ -673,6 +673,18 @@ export default function CalendarGrid({
                 // Find if there are shifts on this day
                 const dayShiftEvents = dayEvents.filter(e => e.type === 'shift');
                 const dayShiftsData = dayShiftEvents.map(evt => {
+                  if (evt.isManagerScheduled) {
+                    return {
+                      event: evt,
+                      data: {
+                        id: evt.id,
+                        label: evt.label,
+                        color: evt.color || '#6366f1',
+                        start: evt.time?.split(' - ')[0] || '09:00',
+                        end: evt.time?.split(' - ')[1] || '18:00'
+                      }
+                    };
+                  }
                   const data = Array.isArray(shifts) ? shifts.find(s => s.id === evt.shiftType) : null;
                   return { event: evt, data };
                 }).filter(item => item.data !== null)
@@ -707,6 +719,12 @@ export default function CalendarGrid({
                       ...(isDragOver ? {
                         border: `2px dashed ${dragColor}`,
                         backgroundColor: dragColor + '10'
+                      } : {}),
+                      ...(isCellToday ? {
+                        borderColor: 'var(--primary, #5e5ff0)',
+                        borderWidth: '2.5px',
+                        boxShadow: '0 4px 12px rgba(94, 95, 240, 0.18)',
+                        zIndex: 2
                       } : {})
                     }}
                   >
@@ -714,10 +732,34 @@ export default function CalendarGrid({
                     <div className="day-number-container" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span className="day-number" style={{ 
                         fontWeight: isCellToday ? '700' : '500',
-                        color: holiday ? '#ef4444' : (isSunday ? '#ef4444' : (isSaturday ? '#3b82f6' : 'inherit'))
+                        color: isCellToday ? '#fff' : (holiday ? '#ef4444' : (isSunday ? '#ef4444' : (isSaturday ? '#3b82f6' : 'inherit'))),
+                        background: isCellToday ? 'var(--primary, #5e5ff0)' : 'transparent',
+                        borderRadius: isCellToday ? '50%' : '0',
+                        width: isCellToday ? '24px' : 'auto',
+                        height: isCellToday ? '24px' : 'auto',
+                        display: isCellToday ? 'flex' : 'inline',
+                        alignItems: isCellToday ? 'center' : 'unset',
+                        justifyContent: isCellToday ? 'center' : 'unset',
+                        fontSize: isCellToday ? '12px' : 'inherit',
+                        flexShrink: 0
                       }}>
                         {dayNum}
                       </span>
+
+                      {isCellToday && (
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: '700',
+                          backgroundColor: 'var(--primary-light, #eff1fe)',
+                          color: 'var(--primary, #5e5ff0)',
+                          padding: '1px 6px',
+                          borderRadius: '10px',
+                          lineHeight: '1.4',
+                          flexShrink: 0
+                        }}>
+                          오늘
+                        </span>
+                      )}
 
                       {(() => {
                         const dayMemos = (memos || []).filter(m => m.date === dateStr);

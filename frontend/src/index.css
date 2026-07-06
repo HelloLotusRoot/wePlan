@@ -113,24 +113,24 @@ input, select, textarea {
 /* Layout Wrappers */
 .app-container {
   display: grid;
-  grid-template-columns: 240px 1fr var(--right-sidebar-width, 340px);
+  grid-template-columns: var(--left-sidebar-width, 240px) minmax(0, 1fr) var(--right-sidebar-width, 340px);
   min-height: 100vh;
   background-color: var(--bg-app);
 }
 
 @media (max-width: 1200px) {
   .app-container {
-    grid-template-columns: 80px 1fr var(--right-sidebar-width, 300px);
+    grid-template-columns: var(--left-sidebar-width, 80px) minmax(0, 1fr) var(--right-sidebar-width, 300px);
   }
 }
 
 .app-container.settings-active {
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: var(--left-sidebar-width, 240px) minmax(0, 1fr);
 }
 
 @media (max-width: 1200px) {
   .app-container.settings-active {
-    grid-template-columns: 80px 1fr;
+    grid-template-columns: var(--left-sidebar-width, 80px) minmax(0, 1fr);
   }
 }
 
@@ -279,7 +279,9 @@ input, select, textarea {
   flex-direction: column;
   gap: 20px;
   overflow-y: auto;
+  overflow-x: hidden;
   height: 100vh;
+  min-width: 0;
 }
 
 /* Calendar Header */
@@ -464,6 +466,19 @@ input, select, textarea {
 .day-cell.today {
   border: 2px solid var(--primary);
   background-color: var(--primary-light);
+  box-shadow: 0 4px 12px rgba(94, 95, 240, 0.12);
+  z-index: 2;
+}
+
+.day-cell.today::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary) 0%, #818cf8 100%);
+  z-index: 10;
 }
 
 .day-number-container {
@@ -1765,3 +1780,4 @@ body.dragging-active {
   opacity: 0.8;
   text-decoration: underline;
 }
+

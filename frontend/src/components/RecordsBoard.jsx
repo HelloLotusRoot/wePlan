@@ -653,7 +653,7 @@ export default function RecordsBoard({
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div className="todo-tab-layout" style={{ 
               display: 'grid', 
-              gridTemplateColumns: draftTodos.length > 0 ? '1fr 1fr' : '1fr', 
+              gridTemplateColumns: '1fr 1fr', 
               gap: '28px' 
             }}>
               {/* Column 1: Input & Existing Saved List */}
@@ -872,10 +872,10 @@ export default function RecordsBoard({
               </div>
 
               {/* Column 2: Draft / Temporary Todos & Save Button */}
-              {draftTodos.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', borderLeft: '1.5px dashed var(--border-color)', paddingLeft: '28px' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '320px', overflowY: 'auto', paddingRight: '4px' }}>
-                    {draftTodos.map(todo => (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', borderLeft: '1.5px dashed var(--border-color)', paddingLeft: '28px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '320px', overflowY: 'auto', paddingRight: '4px' }}>
+                  {draftTodos.length > 0 ? (
+                    draftTodos.map(todo => (
                       <div 
                         key={todo.id}
                         className="draft-todo-item"
@@ -911,19 +911,43 @@ export default function RecordsBoard({
                           <X size={15} />
                         </button>
                       </div>
-                    ))}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleSaveDrafts}
-                    className="btn-save-all active"
-                  >
-                    <Check size={16} />
-                    투두리스트 저장하기
-                  </button>
+                    ))
+                  ) : (
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '10px',
+                      padding: '40px 20px',
+                      border: '1.5px dashed var(--border-color)',
+                      borderRadius: '12px',
+                      backgroundColor: '#fafbfc',
+                      textAlign: 'center',
+                      minHeight: '120px'
+                    }}>
+                      <span style={{ fontSize: '12.5px', fontWeight: '600', color: 'var(--text-muted)' }}>
+                        저장할 할 일이 없습니다
+                      </span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                        왼쪽에서 할 일을 입력한 뒤<br />
+                        <strong>[+ 투두리스트로 이동]</strong> 버튼을 클릭하면<br />
+                        여기에 임시 저장됩니다.
+                      </span>
+                    </div>
+                  )}
                 </div>
-              )}
+
+                <button
+                  type="button"
+                  onClick={handleSaveDrafts}
+                  className={draftTodos.length > 0 ? "btn-save-all active" : "btn-save-all disabled"}
+                  disabled={draftTodos.length === 0}
+                >
+                  <Check size={16} />
+                  투두리스트 저장하기
+                </button>
+              </div>
             </div>
           </div>
           )}

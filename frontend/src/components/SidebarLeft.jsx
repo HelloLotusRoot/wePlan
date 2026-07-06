@@ -23,7 +23,9 @@ export default function SidebarLeft({
   userJob,
   setUserJob,
   calendarPerspective,
-  setCalendarPerspective
+  setCalendarPerspective,
+  showLeftSidebar,
+  setShowLeftSidebar
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [localName, setLocalName] = useState(userName);
@@ -37,7 +39,7 @@ export default function SidebarLeft({
 
   const menuItems = [
     { id: 'calendar', label: '캘린더', icon: CalendarIcon },
-    { id: 'schedule', label: '스케줄', icon: Clock },
+    { id: 'schedule', label: '근무 배정', icon: Clock },
     { id: 'alarm', label: '알림', icon: Bell },
     { id: 'shared', label: '일정 공유', icon: Users },
     { id: 'records', label: '기록', icon: FileText },
@@ -175,6 +177,50 @@ export default function SidebarLeft({
           )}
         </div>
       </div>
+
+
+      {/* Collapse Sidebar Button at the bottom */}
+      {setShowLeftSidebar && (
+        <button
+          type="button"
+          onClick={() => setShowLeftSidebar(false)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            width: '100%',
+            padding: '8px 12px',
+            borderRadius: '8px',
+            color: 'var(--text-muted)',
+            fontSize: '12px',
+            fontWeight: '700',
+            cursor: 'pointer',
+            marginTop: '12px',
+            border: '1px solid var(--border-color)',
+            backgroundColor: 'var(--bg-card)',
+            justifyContent: 'center',
+            transition: 'all 0.15s ease'
+          }}
+          title="메뉴 접기"
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--bg-app)';
+            e.currentTarget.style.color = 'var(--primary)';
+            e.currentTarget.style.borderColor = 'var(--primary)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'var(--bg-card)';
+            e.currentTarget.style.color = 'var(--text-muted)';
+            e.currentTarget.style.borderColor = 'var(--border-color)';
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="9" y1="3" x2="9" y2="21"></line>
+            <path d="M15 15l-3-3 3-3"></path>
+          </svg>
+          <span>사이드바 접기</span>
+        </button>
+      )}
     </aside>
   );
 }
