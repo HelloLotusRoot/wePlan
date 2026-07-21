@@ -8,6 +8,7 @@ import {
   BarChart3, 
   Settings, 
   UserPlus,
+  UserCheck,
   Edit,
   Check
 } from 'lucide-react';
@@ -25,27 +26,39 @@ export default function SidebarLeft({
   calendarPerspective,
   setCalendarPerspective,
   showLeftSidebar,
-  setShowLeftSidebar
+  setShowLeftSidebar,
+  user,
+  setUser,
+  onLogout
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [localName, setLocalName] = useState(userName);
-  const [localJob, setLocalJob] = useState(userJob);
+
+  React.useEffect(() => {
+    setLocalName(userName);
+  }, [userName]);
 
   const handleSaveProfile = () => {
     setUserName(localName);
-    setUserJob(localJob);
+    if (user) {
+      const updatedUser = { ...user, nickname: localName };
+      if (setUser) setUser(updatedUser);
+      localStorage.setItem('weplan_user', JSON.stringify(updatedUser));
+    }
     setIsEditing(false);
   };
 
   const menuItems = [
     { id: 'calendar', label: '캘린더', icon: CalendarIcon },
-    { id: 'schedule', label: '근무 배정', icon: Clock },
+    { id: 'friends', label: '친구 목록', icon: UserCheck },
     { id: 'alarm', label: '알림', icon: Bell },
-    { id: 'shared', label: '일정 공유', icon: Users },
     { id: 'records', label: '기록', icon: FileText },
     { id: 'stats', label: '통계', icon: BarChart3 },
+    { id: 'schedule', label: '근무 배정', icon: Clock },
     { id: 'settings', label: '설정', icon: Settings },
   ];
+
+  const displayUserName = userName || user?.nickname || '사용자';
 
   return (
     <aside className="sidebar-left">
@@ -53,32 +66,41 @@ export default function SidebarLeft({
       <div className="profile-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '8px', padding: '12px 4px', borderBottom: '1px solid var(--border-color)', marginBottom: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}>
           <img 
-            src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=120&auto=format&fit=crop" 
-            alt={userName} 
+            src={user?.profileImage || "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=120&auto=format&fit=crop"} 
+            alt={displayUserName} 
             className="profile-avatar" 
           />
           {!isEditing ? (
             <div className="profile-info" style={{ flex: 1 }}>
-              <span className="profile-name" style={{ display: 'block', fontSize: '15px', fontWeight: '600' }}>{userName}</span>
-              <span className="profile-role" style={{ display: 'block', fontSize: '12px', color: 'var(--text-muted)' }}>{userJob}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span className="profile-name" style={{ display: 'block', fontSize: '15px', fontWeight: '600' }}>{displayUserName}</span>
+                {user && (
+                  <span style={{ 
+                    fontSize: '10px', 
+                    backgroundColor: '#FEE500', 
+                    color: '#3c1e1e', 
+                    padding: '1px 5px', 
+                    borderRadius: '4px', 
+                    fontWeight: '700',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '2px',
+                    lineHeight: '1.4'
+                  }}>
+                    카카오
+                  </span>
+                )}
+              </div>
             </div>
           ) : (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <input 
                 type="text" 
                 className="input-text" 
-                style={{ padding: '2px 6px', fontSize: '12px', width: '100%', height: '22px' }}
+                style={{ padding: '2px 6px', fontSize: '12px', width: '100%', height: '26px' }}
                 value={localName} 
                 onChange={(e) => setLocalName(e.target.value)} 
                 placeholder="이름"
-              />
-              <input 
-                type="text" 
-                className="input-text" 
-                style={{ padding: '2px 6px', fontSize: '11px', width: '100%', height: '22px' }}
-                value={localJob} 
-                onChange={(e) => setLocalJob(e.target.value)} 
-                placeholder="직종"
               />
             </div>
           )}
@@ -98,6 +120,30 @@ export default function SidebarLeft({
             {isEditing ? <Check size={14} color="#10b981" /> : <Edit size={14} />}
           </button>
         </div>
+        {user && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', width: '100%', marginTop: '2px' }}>
+            <button 
+              onClick={onLogout}
+              style={{
+                fontSize: '11px',
+                color: 'var(--text-muted)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+              onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+            >
+              로그아웃
+            </button>
+          </div>
+        )}
       </div>
 
 

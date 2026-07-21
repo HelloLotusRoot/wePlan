@@ -10,7 +10,16 @@ async function request(path, options = {}) {
   try {
     const response = await fetch(url, options);
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const text = await response.text();
+      let errorData = text;
+      try {
+        errorData = JSON.parse(text);
+      } catch (e) {}
+      
+      const err = new Error(typeof errorData === 'object' && errorData.detail ? errorData.detail : (typeof errorData === 'string' ? errorData : `HTTP status ${response.status}`));
+      err.status = response.status;
+      err.data = errorData;
+      throw err;
     }
     if (response.status === 204) return null;
     const text = await response.text();
@@ -158,5 +167,9 @@ export const api = {
     } catch (e) {
       console.warn("Failed to delete todo from backend.");
     }
+  },
+
+  async loginWithKakao(code, redirectUri) {
+    return await request(`/auth/kakao?code=${encodeURIComponent(code)}&redirectUri=${encodeURIComponent(redirectUri)}`);
   }
 };

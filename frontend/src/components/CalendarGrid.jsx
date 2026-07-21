@@ -409,8 +409,34 @@ export default function CalendarGrid({
 
   return (
     <div className="calendar-card" style={{ display: 'flex', flexDirection: 'column' }}>
+      {/* 📢 시점 전용 상단 배너 (월 헤더 위로 이동) */}
+      {calendarPerspective !== 'me' && (
+        <div style={{
+          backgroundColor: '#f0fdf4',
+          border: '1px solid #bbf7d0',
+          borderRadius: '10px',
+          padding: '7px 14px',
+          marginTop: '2px',
+          marginBottom: '6px',
+          fontSize: '12px',
+          color: '#15803d',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          boxShadow: '0 2px 4px rgba(16, 185, 129, 0.04)'
+        }}>
+          <span>📢</span>
+          <span>
+            <strong style={{ color: '#14532d', fontWeight: '800' }}>
+              {sharedUsers.find(u => u.id === calendarPerspective)?.name}
+            </strong>
+            님에게 공유된 내 일정만 표시됩니다. (비공개 및 미지정 일정은 숨김 처리됨)
+          </span>
+        </div>
+      )}
+
       {/* View Mode Toolbar & Nav */}
-      <div className="calendar-header" style={{ marginBottom: '16px', borderBottom: 'none', boxShadow: 'none', padding: '0 0 16px 0' }}>
+      <div className="calendar-header" style={{ marginTop: '2px', marginBottom: '4px', borderBottom: 'none', boxShadow: 'none', padding: '0 0 4px 0' }}>
         <div className="header-month-nav" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {/* Year Dropdown */}
             <div style={{ position: 'relative' }}>
@@ -662,25 +688,7 @@ export default function CalendarGrid({
         </div>
       </div>
 
-      {calendarPerspective !== 'me' && (
-        <div style={{
-          backgroundColor: '#f0fdf4',
-          border: '1px solid #bbf7d0',
-          borderRadius: '8px',
-          padding: '8px 12px',
-          marginBottom: '12px',
-          fontSize: '12px',
-          color: '#166534',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
-          <span>📢</span>
-          <span>
-            <strong>{sharedUsers.find(u => u.id === calendarPerspective)?.name}</strong>님에게 공유된 내 일정 화면입니다. (비공개 일정 및 지정되지 않은 공유 일정은 숨김 처리됩니다.) {isReadOnlyPerspective && <strong style={{ color: '#dc2626', marginLeft: '6px' }}>(보기 전용 모드)</strong>}
-          </span>
-        </div>
-      )}
+
 
       {/* Weekday headers */}
       <div className="grid-weekdays">
@@ -1280,7 +1288,8 @@ export default function CalendarGrid({
         })}
       </div>
 
-      {/* Calendar Bottom Quick Settings Buttons */}
+      {/* Settings Navigation Buttons */}
+      {calendarPerspective === 'me' && (
       <div style={{ 
         display: 'flex', 
         gap: '10px', 
@@ -1315,6 +1324,7 @@ export default function CalendarGrid({
           <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-main)' }}>생일 설정</span>
         </button>
       </div>
+      )}
     </div>
   );
 }

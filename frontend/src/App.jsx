@@ -6,6 +6,8 @@ import SettingsPanels from './components/SettingsPanels';
 import StatsDashboard from './components/StatsDashboard';
 import RecordsBoard from './components/RecordsBoard';
 import ManagerScheduler from './components/ManagerScheduler';
+import FriendsBoard from './components/FriendsBoard';
+import Login from './components/Login';
 
 import { 
   Plus, 
@@ -118,13 +120,95 @@ export default function App() {
 
 
   // Load state from localStorage or use defaults
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('weplan_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
   const [userName, setUserName] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('weplan_user');
+      if (savedUser) {
+        const u = JSON.parse(savedUser);
+        if (u && u.nickname) return u.nickname;
+      }
+    } catch (e) {}
     return localStorage.getItem('weplan_username') || '김소현';
   });
 
   const [userJob, setUserJob] = useState(() => {
     return localStorage.getItem('weplan_userjob') || '간호사';
   });
+
+  useEffect(() => {
+    if (user && user.nickname) {
+      setUserName(user.nickname);
+      localStorage.setItem('weplan_username', user.nickname);
+    }
+  }, [user]);
+
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  const handledCodeRef = React.useRef(null);
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    if (code && handledCodeRef.current !== code) {
+      handledCodeRef.current = code;
+      // Clean URL search params immediately so code is not reused
+      window.history.replaceState({}, document.title, window.location.pathname);
+
+      const handleLoginRedirect = async () => {
+        setIsLoggingIn(true);
+        try {
+          const redirectUri = window.location.origin + '/';
+          const userInfo = await api.loginWithKakao(code, redirectUri);
+          // Use kakao id as primary key - nickname may be empty if not agreed in consent
+          if (userInfo && userInfo.id) {
+            const loginUser = {
+              ...userInfo,
+              nickname: userInfo.nickname || userInfo.id,
+            };
+            localStorage.setItem('weplan_user', JSON.stringify(loginUser));
+            setUser(loginUser);
+            // Sync user name with setting
+            if (loginUser.nickname && loginUser.nickname !== loginUser.id) {
+              setUserName(loginUser.nickname);
+              localStorage.setItem('weplan_username', loginUser.nickname);
+            }
+          } else if (userInfo) {
+            // userInfo returned but no id - log for debugging
+            console.error('Kakao login returned unexpected data:', userInfo);
+            alert('카카오 로그인에 실패하였습니다. (사용자 정보 없음)');
+          }
+        } catch (error) {
+          console.error("Kakao Login redirect exchange failed", error);
+          let detailMsg = error?.data?.detail || error?.message || '';
+          if (typeof detailMsg === 'object') {
+            detailMsg = JSON.stringify(detailMsg);
+          }
+          if (detailMsg) {
+            alert(`카카오 로그인 실패:\n${detailMsg}`);
+          } else {
+            alert('카카오 로그인에 실패하였습니다. 다시 시도해 주세요.');
+          }
+        } finally {
+          setIsLoggingIn(false);
+        }
+      };
+      handleLoginRedirect();
+    }
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('weplan_user');
+    setUser(null);
+  };
 
   const [shifts, setShifts] = useState(() => {
     const saved = localStorage.getItem('weplan_shifts');
@@ -943,6 +1027,44 @@ export default function App() {
   const selectedPerspectiveUser = sharedUsers.find(u => u.id === calendarPerspective);
   const isReadOnlyPerspective = calendarPerspective !== 'me' && (!selectedPerspectiveUser || !selectedPerspectiveUser.privilege.includes('편집'));
 
+  if (isLoggingIn) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        width: '100vw',
+        background: 'radial-gradient(circle at 10% 20%, rgba(94, 95, 240, 0.05) 0%, rgba(167, 139, 250, 0.05) 90.2%), #f4f7fc',
+        fontFamily: 'var(--font-primary)',
+        gap: '20px'
+      }}>
+        <div style={{
+          width: '40px',
+          height: '40px',
+          border: '4px solid var(--primary-light)',
+          borderTop: '4px solid var(--primary)',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
+        }}></div>
+        <p style={{ color: 'var(--text-main)', fontSize: '14px', fontWeight: '600', margin: 0 }}>
+          카카오 로그인 중입니다. 잠시만 기다려주세요...
+        </p>
+        <style>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
+
   return (
     <div 
       className={`app-container ${
@@ -952,7 +1074,7 @@ export default function App() {
       }`}
       style={{
         '--left-sidebar-width': showLeftSidebar ? '240px' : '0px',
-        '--right-sidebar-width': (showRightSidebar && currentTab !== 'settings' && currentTab !== 'stats' && currentTab !== 'schedule') ? `${rightSidebarWidth}px` : '0px'
+        '--right-sidebar-width': (showRightSidebar && currentTab !== 'settings' && currentTab !== 'stats' && currentTab !== 'schedule' && currentTab !== 'friends') ? `${rightSidebarWidth}px` : '0px'
       }}
     >
       {/* 3. Left Sidebar Navigation */}
@@ -971,12 +1093,15 @@ export default function App() {
           setCalendarPerspective={setCalendarPerspective}
           showLeftSidebar={showLeftSidebar}
           setShowLeftSidebar={setShowLeftSidebar}
+          user={user}
+          setUser={setUser}
+          onLogout={handleLogout}
         />
       )}
 
 
       {/* 1. Right Sidebar Detail */}
-      {currentTab !== 'settings' && currentTab !== 'stats' && currentTab !== 'schedule' && showRightSidebar && (
+      {currentTab !== 'settings' && currentTab !== 'stats' && currentTab !== 'schedule' && currentTab !== 'friends' && showRightSidebar && (
         <div className="sidebar-right-container" style={{ height: '100vh', position: 'sticky', top: 0 }}>
           <div 
             className={`resize-handle-v ${isDragging ? 'dragging' : ''}`}
@@ -1081,6 +1206,37 @@ export default function App() {
             events={events}
             shifts={shifts}
             currentDate={currentDate}
+          />
+        ) : currentTab === 'friends' ? (
+          <FriendsBoard 
+            sharedUsers={sharedUsers}
+            setSharedUsers={setSharedUsers}
+            relationGroups={relationGroups}
+            setRelationGroups={setRelationGroups}
+            calendarPerspective={calendarPerspective}
+            setCalendarPerspective={setCalendarPerspective}
+            setCurrentTab={setCurrentTab}
+            isPrivateMode={isPrivateMode}
+            setIsPrivateMode={setIsPrivateMode}
+            events={events}
+            currentDate={currentDate}
+            setCurrentDate={setCurrentDate}
+            shifts={shifts}
+            settings={settings}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+            workViewMode={workViewMode}
+            aptViewMode={aptViewMode}
+            holidaysMap={holidaysMap}
+            primaryShiftMap={primaryShiftMap}
+            onSelectDay={(dateStr) => {
+              setSelectedDay(dateStr);
+              const parts = dateStr.split('-');
+              setCurrentDate(new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)));
+            }}
+            selectedDay={selectedDay}
+            onAddEventClick={handleOpenAddModal}
+            onEditEvent={handleViewEvent}
           />
         ) : currentTab === 'records' ? (
           <RecordsBoard 
