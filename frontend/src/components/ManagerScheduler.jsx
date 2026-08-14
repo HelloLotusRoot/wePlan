@@ -1878,6 +1878,136 @@ export default function ManagerScheduler({
           border-color: var(--bg-card) transparent transparent transparent;
           filter: drop-shadow(0 1px 0 var(--border-color));
         }
+
+        @media (max-width: 900px) {
+          .manager-scheduler-container {
+            padding: 16px;
+            gap: 14px;
+            overflow: hidden;
+          }
+
+          .scheduler-header,
+          .scheduler-controls,
+          .scheduler-actions-bar {
+            width: 100%;
+          }
+
+          .scheduler-controls,
+          .scheduler-actions-bar {
+            justify-content: flex-start;
+            flex-wrap: wrap;
+          }
+
+          .grid-panel,
+          .grid-scroll-wrapper {
+            min-width: 0;
+            max-width: 100%;
+          }
+
+          .custom-modal-overlay {
+            padding: 16px;
+          }
+
+          .custom-modal-content {
+            width: min(680px, 100%) !important;
+            max-width: 100%;
+          }
+
+          .hover-popover-content {
+            width: min(360px, calc(100vw - 32px)) !important;
+            left: 0;
+            transform: translate(0, 10px);
+          }
+
+          .hover-popover-container:hover .hover-popover-content {
+            transform: translate(0, 0);
+          }
+        }
+
+        @media (max-width: 640px) {
+          .manager-scheduler-container {
+            padding: 12px 8px;
+            border-radius: 12px;
+          }
+
+          .scheduler-header {
+            align-items: flex-start;
+            gap: 12px;
+          }
+
+          .scheduler-title-section {
+            align-items: flex-start;
+          }
+
+          .scheduler-title-section h2 {
+            font-size: 17px !important;
+          }
+
+          .scheduler-title-section p {
+            font-size: 11px !important;
+          }
+
+          .scheduler-icon-wrapper {
+            padding: 8px;
+          }
+
+          .scheduler-controls {
+            gap: 7px !important;
+          }
+
+          .month-selector {
+            width: 100%;
+            justify-content: space-between;
+            margin-right: 0 !important;
+          }
+
+          .brush-selector {
+            width: 100%;
+            overflow-x: auto;
+            flex-wrap: nowrap !important;
+            padding: 3px 1px 7px;
+          }
+
+          .brush-btn {
+            flex-shrink: 0;
+            padding: 6px 10px;
+          }
+
+          .scheduler-actions-bar > button,
+          .scheduler-actions-bar > .hover-popover-container {
+            flex: 1 1 140px;
+          }
+
+          .scheduler-actions-bar > .hover-popover-container > button {
+            width: 100%;
+            justify-content: center;
+          }
+
+          .custom-modal-overlay {
+            padding: 0;
+            align-items: flex-end;
+          }
+
+          .custom-modal-content {
+            width: 100% !important;
+            max-width: 100% !important;
+            max-height: 92dvh;
+            padding: 16px;
+            border-radius: 18px 18px 0 0;
+          }
+
+          .custom-modal-content input,
+          .custom-modal-content select,
+          .custom-modal-content textarea,
+          .scheduler-select-btn {
+            max-width: 100%;
+            min-width: 0;
+          }
+
+          .staff-item {
+            padding: 8px;
+          }
+        }
       `}</style>
 
       {/* Scheduler Header */}

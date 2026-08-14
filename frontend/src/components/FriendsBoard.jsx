@@ -175,16 +175,20 @@ export default function FriendsBoard({
   };
 
   const handleTogglePerspectiveForUser = (userId) => {
-    const friend = (sharedUsers || []).find(u => u.id === userId);
-    if (friend) {
-      setPreviewModalUser(friend);
+    if (calendarPerspective === userId) {
+      setCalendarPerspective('me');
+    } else {
+      const friend = (sharedUsers || []).find(u => u.id === userId);
+      if (friend) {
+        setPreviewModalUser(friend);
+      }
     }
   };
 
   const activePerspectiveUser = (sharedUsers || []).find(u => u.id === calendarPerspective);
 
   return (
-    <div style={{
+    <div className="friends-board" style={{
       width: '100%',
       maxWidth: '1400px',
       margin: '0 auto',
@@ -196,7 +200,7 @@ export default function FriendsBoard({
     }}>
 
       {/* 1. Sleek Header Banner */}
-      <div style={{
+      <div className="friends-header-card" style={{
         backgroundColor: '#ffffff',
         borderRadius: '24px',
         padding: '28px 32px',
@@ -232,7 +236,7 @@ export default function FriendsBoard({
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+        <div className="friends-header-actions" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <button
             onClick={() => setShowGroupModal(true)}
             style={{
@@ -279,7 +283,7 @@ export default function FriendsBoard({
       </div>
 
       {/* 3. Search and Category Filter Bar */}
-      <div style={{
+      <div className="friends-filter-bar" style={{
         backgroundColor: '#ffffff',
         borderRadius: '18px',
         padding: '14px 20px',
@@ -334,7 +338,7 @@ export default function FriendsBoard({
         </div>
 
         {/* Search Bar */}
-        <div style={{ position: 'relative', minWidth: '220px' }}>
+        <div className="friends-search" style={{ position: 'relative', minWidth: '220px' }}>
           <Search size={15} color="var(--text-muted)" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
           <input
             type="text"
@@ -356,7 +360,7 @@ export default function FriendsBoard({
 
       {/* 4. COMPACT MINI-CARD DESIGN */}
       {filteredUsers.length === 0 ? (
-        <div style={{
+        <div className="friends-card-grid" style={{
           backgroundColor: '#ffffff',
           borderRadius: '16px',
           padding: '40px 20px',
@@ -975,6 +979,8 @@ export default function FriendsBoard({
             </div>
           </div>
         </div>
+      )}
+
       {/* 6. Friend Profile & Settings Modal (with Delete Button at Very Bottom) */}
       {selectedFriendProfile && (
         <div style={{

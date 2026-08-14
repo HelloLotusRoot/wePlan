@@ -53,6 +53,7 @@ const HOLIDAYS_DATA = {
   "2026-06-03": { name: "제9회 전국동시지방선거" },
   "2026-06-06": { name: "현충일" },
   "2026-08-15": { name: "광복절" },
+  "2026-08-17": { name: "대체공휴일(광복절)", isAlternative: true },
   "2026-09-24": { name: "추석 연휴" },
   "2026-09-25": { name: "추석" },
   "2026-09-26": { name: "추석 연휴" },
@@ -205,4 +206,3 @@ function getLocalHolidaysForMonth(year, month) {
   });
   return holidays;
 }
-

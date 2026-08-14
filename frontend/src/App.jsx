@@ -16,7 +16,6 @@ import {
   User, 
   Lock, 
   Globe, 
-  Smartphone, 
   Layers, 
   BellRing,
   Bell,
@@ -297,6 +296,7 @@ export default function App() {
   // UI Control states
   const [currentTab, setCurrentTab] = useState('calendar');
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showAlarmModal, setShowAlarmModal] = useState(false);
   const [settingsModalTab, setSettingsModalTab] = useState('schedule'); // 'schedule' | 'alarm' | 'birthday'
   const [rightSidebarWidth, setRightSidebarWidth] = useState(() => {
     const saved = localStorage.getItem('weplan_right_sidebar_width');
@@ -885,6 +885,7 @@ export default function App() {
       if (formType === 'shift') {
         const selectedDate = new Date(selectedDay + "T00:00:00");
         let targetDates = [selectedDay];
+        let affectedDates = [selectedDay];
         
         if (formShiftRange === 'custom') {
           const activeDays = Object.keys(formShiftDays)
@@ -897,6 +898,7 @@ export default function App() {
           }
           
           targetDates = [];
+          affectedDates = [];
           
           if (formShiftScope === 'week') {
             const startOfWeek = new Date(selectedDate);
@@ -909,6 +911,7 @@ export default function App() {
                 const y = d.getFullYear();
                 const m = String(d.getMonth() + 1).padStart(2, '0');
                 const dateStr = `${y}-${m}-${String(d.getDate()).padStart(2, '0')}`;
+                affectedDates.push(dateStr);
                 
                 const isHoliday = holidaysMap[dateStr] || getHoliday(dateStr);
                 if (formExcludeHolidays && isHoliday) continue;
@@ -927,6 +930,7 @@ export default function App() {
                 const y = d.getFullYear();
                 const m = String(d.getMonth() + 1).padStart(2, '0');
                 const dateStr = `${y}-${m}-${String(d.getDate()).padStart(2, '0')}`;
+                affectedDates.push(dateStr);
                 
                 const isHoliday = holidaysMap[dateStr] || getHoliday(dateStr);
                 if (formExcludeHolidays && isHoliday) continue;
@@ -936,9 +940,14 @@ export default function App() {
             }
           }
         }
+
+        if (affectedDates.length === 0) {
+          alert('선택한 조건에 등록할 근무일이 없습니다. 요일 또는 공휴일 제외 설정을 확인해 주세요.');
+          return;
+        }
         
         setEvents(prev => {
-          const filtered = prev.filter(e => !(targetDates.includes(e.date) && e.type === 'shift' && e.shiftType === formShiftType));
+          const filtered = prev.filter(e => !(affectedDates.includes(e.date) && e.type === 'shift' && e.shiftType === formShiftType));
           const newShifts = targetDates.map((dateStr, idx) => ({
             id: `${Date.now()}-${idx}`,
             type: 'shift',
@@ -1021,9 +1030,6 @@ export default function App() {
   // Trips data
   const currentTrips = events.filter(e => e.type === 'trip');
 
-  // Filter regular appointments for mock details on mobile simulator
-  const activeApt = events.find(e => e.id === 'apt-3') || INITIAL_EVENTS[2];
-
   const selectedPerspectiveUser = sharedUsers.find(u => u.id === calendarPerspective);
   const isReadOnlyPerspective = calendarPerspective !== 'me' && (!selectedPerspectiveUser || !selectedPerspectiveUser.privilege.includes('편집'));
 
@@ -1096,6 +1102,7 @@ export default function App() {
           user={user}
           setUser={setUser}
           onLogout={handleLogout}
+          onOpenAlarm={() => setShowAlarmModal(true)}
         />
       )}
 
@@ -1168,11 +1175,29 @@ export default function App() {
                 설정
               </h2>
               <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                캘린더 표시 및 연동 설정을 구성합니다.
+                알림과 캘린더 표시 설정을 구성합니다.
               </p>
             </div>
 
-            <div style={{ maxWidth: '360px' }}>
+            <div style={{ maxWidth: '420px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <SettingsPanels
+                shifts={shifts}
+                setShifts={setShifts}
+                alarmSettings={alarmSettings}
+                setAlarmSettings={setAlarmSettings}
+                settings={settings}
+                setSettings={setSettings}
+                sharedUsers={sharedUsers}
+                setSharedUsers={setSharedUsers}
+                isPrivateMode={isPrivateMode}
+                setIsPrivateMode={setIsPrivateMode}
+                onAddBirthday={handleAddBirthday}
+                onlyAlarmSettings={true}
+                relationGroups={relationGroups}
+                setRelationGroups={setRelationGroups}
+                calendarPerspective={calendarPerspective}
+                setCalendarPerspective={setCalendarPerspective}
+              />
               <SettingsPanels 
                 shifts={shifts}
                 setShifts={setShifts}
@@ -1312,221 +1337,6 @@ export default function App() {
               }}
             />
 
-            {/* Mobile Mockup Simulator title */}
-            <div style={{ marginTop: '20px', textAlign: 'center' }}>
-              <h2 style={{ fontSize: '18px', fontWeight: '700', color: 'var(--text-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                <Smartphone size={20} color="var(--primary)" />
-                모바일 화면 시뮬레이터 (MyShift 앱 반응형)
-              </h2>
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                하단 폰 화면에서 모바일 버전의 스케줄 확인 및 상세 일정/알림 조회를 모의 테스트해보세요.
-              </p>
-            </div>
-
-            {/* Mobile View Mockup (Double frames side-by-side or toggled) */}
-            <div className="mobile-simulator-layout">
-              {/* Phone 1: Mobile Calendar List */}
-              <div className="phone-container">
-                <div className="phone-header">
-                  <span>9:41</span>
-                  <span style={{ fontSize: '11px' }}>{currentDate.getFullYear()}년 {currentDate.getMonth() + 1}월 ▾</span>
-                  <span>🔋 📶</span>
-                </div>
-                
-                <div className="phone-screen" style={{ backgroundColor: '#f8fafc' }}>
-                  <div className="phone-body">
-                    {/* Mobile Shift header */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', flexWrap: 'wrap', gap: '4px' }}>
-                      {Array.isArray(shifts) && shifts.map(s => (
-                        <span key={s.id} className="legend-badge" style={{ backgroundColor: s.color + '20', color: s.color }}>{s.label}</span>
-                      ))}
-                      <span className="legend-badge" style={{ backgroundColor: 'var(--apt-bg)', color: 'var(--apt-text)' }}>약속</span>
-                    </div>
-
-                    {/* Mobile week bar */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', textAlign: 'center', backgroundColor: '#ffffff', borderRadius: '12px', padding: '10px 4px', boxShadow: 'var(--shadow-sm)' }}>
-                      {['일', '월', '화', '수', '목', '금', '토'].map((w, idx) => (
-                        <span key={idx} style={{ fontSize: '11px', color: idx === 0 ? '#ef4444' : (idx === 6 ? '#3b82f6' : 'var(--text-muted)') }}>{w}</span>
-                      ))}
-                      {/* Mock week 12-18 */}
-                      {[12, 13, 14, 15, 16, 17, 18].map(day => (
-                        <span key={day} style={{ 
-                          fontSize: '13px', 
-                          fontWeight: '700', 
-                          marginTop: '6px',
-                          padding: '4px',
-                          borderRadius: '50%',
-                          backgroundColor: day === 15 ? 'var(--primary)' : 'transparent',
-                          color: day === 15 ? '#ffffff' : 'inherit'
-                        }}>
-                          {day}
-                        </span>
-                      ))}
-                    </div>
-
-                    {/* Mobile daily timeline (May 15) */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)' }}>07:00</div>
-                      {shifts[0] && (
-                        <div style={{ 
-                          backgroundColor: shifts[0].color + '15', 
-                          color: shifts[0].color, 
-                          padding: '10px 14px', 
-                          borderRadius: '12px', 
-                          borderLeft: `4px solid ${shifts[0].color}` 
-                        }}>
-                          <div style={{ fontWeight: '700', fontSize: '13px' }}>{shifts[0].label} 근무</div>
-                          <span style={{ fontSize: '11px' }}>{shifts[0].start} - {shifts[0].end} (지정 근무)</span>
-                        </div>
-                      )}
-
-                      <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', marginTop: '8px' }}>12:30</div>
-                      <div style={{ backgroundColor: 'var(--apt-bg)', color: 'var(--apt-text)', padding: '10px 14px', borderRadius: '12px', borderLeft: '4px solid var(--apt-dot)' }}>
-                        <div style={{ fontWeight: '700', fontSize: '13px' }}>친구랑 점심</div>
-                        <span style={{ fontSize: '11px' }}>12:30 - 13:30 @ 강남역 맛집</span>
-                      </div>
-
-                      <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', marginTop: '8px' }}>18:00</div>
-                      <div style={{ backgroundColor: '#f1f5f9', color: '#334155', padding: '10px 14px', borderRadius: '12px' }}>
-                        <div style={{ fontWeight: '700', fontSize: '13px' }}>헬스</div>
-                        <span style={{ fontSize: '11px' }}>18:00 - 19:30 @ 헬스장</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Mobile bottom navigation */}
-                <div style={{ display: 'flex', justifyContent: 'space-around', padding: '10px 0', borderTop: '1px solid var(--border-color)', backgroundColor: '#ffffff', fontSize: '10px', color: 'var(--text-muted)' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', color: 'var(--primary)' }}>
-                    <span>📅</span>
-                    <span>캘린더</span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <span>📋</span>
-                    <span>일정</span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <span>🔔</span>
-                    <span>알림</span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                    <span>👥</span>
-                    <span>공유</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Phone 2: Mobile Event Details */}
-              <div className="phone-container">
-                <div className="phone-header">
-                  <span>9:41</span>
-                  <span style={{ fontWeight: '700' }}>일정 상세</span>
-                  <span>🔋 📶</span>
-                </div>
-
-                <div className="phone-screen">
-                  <div className="phone-body">
-                    {/* Tabs */}
-                    <div className="detail-tab-row">
-                      <div className="detail-tab">일 (근무)</div>
-                      <div className="detail-tab active">약속</div>
-                    </div>
-
-                    {/* Event Header */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <h2 style={{ fontSize: '18px', fontWeight: '700' }}>{activeApt.title}</h2>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Clock size={12} />
-                        <span>
-                          {(() => {
-                            if (!activeApt.date) return '';
-                            const activeDate = new Date(activeApt.date + "T00:00:00");
-                            const mm = String(activeDate.getMonth() + 1).padStart(2, '0');
-                            const dd = String(activeDate.getDate()).padStart(2, '0');
-                            const dayName = activeDate.toLocaleDateString('ko-KR', { weekday: 'short' });
-                            return `${activeDate.getFullYear()}.${mm}.${dd} (${dayName})`;
-                          })()} {activeApt.time} - 13:30
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <MapPin size={12} />
-                        <span>{activeApt.place}</span>
-                      </div>
-                    </div>
-
-                    {/* Participants */}
-                    <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: '600', display: 'block', marginBottom: '8px' }}>참여자</span>
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        {activeApt.participants ? activeApt.participants.map((p, idx) => (
-                          <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                            <img 
-                              src={p.avatar} 
-                              alt={p.name} 
-                              style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover' }} 
-                            />
-                            <span style={{ fontSize: '10px' }}>{p.name}</span>
-                          </div>
-                        )) : (
-                          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>나 단독 일정</span>
-                        )}
-                        <button 
-                          style={{ width: '36px', height: '36px', borderRadius: '50%', border: '1px dashed var(--border-color)', display: 'flex', alignItems: 'center', justifyStyle: 'center', fontSize: '16px', color: 'var(--text-muted)', justifyContent: 'center' }}
-                          onClick={handleInviteFriend}
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Alarm Settings simulator */}
-                    <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: '600' }}>알람 설정</span>
-                      
-                      <div className="toggle-switch-row">
-                        <span>전날 18:00 알람</span>
-                        <label className="switch">
-                          <input type="checkbox" defaultChecked />
-                          <span className="slider"></span>
-                        </label>
-                      </div>
-
-                      <div className="toggle-switch-row">
-                        <span>1시간 전 알림</span>
-                        <label className="switch">
-                          <input type="checkbox" />
-                          <span className="slider"></span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Repeat settings */}
-                    <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-                      <span>반복</span>
-                      <span style={{ color: 'var(--text-muted)' }}>반복 안함 ❯</span>
-                    </div>
-
-                    {/* Edit / Delete footer */}
-                    <div style={{ marginTop: 'auto', display: 'flex', gap: '10px' }}>
-                      <button 
-                        className="btn-secondary" 
-                        style={{ flex: 1, padding: '10px' }}
-                        onClick={() => alert('삭제는 상단 데스크탑 상세창에서 가능합니다.')}
-                      >
-                        삭제
-                      </button>
-                      <button 
-                        className="btn-save" 
-                        style={{ flex: 2, padding: '10px' }}
-                        onClick={() => alert('수정은 상단 데스크탑 상세창에서 가능합니다.')}
-                      >
-                        수정
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
           </>
         )}
       </main>
@@ -1778,6 +1588,100 @@ export default function App() {
         </div>
       )}
 
+      {/* Notification popup */}
+      {showAlarmModal && (
+        <div className="dialog-overlay" onClick={() => setShowAlarmModal(false)}>
+          <div
+            className="dialog-content"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '420px',
+              maxWidth: '95%',
+              maxHeight: '90vh',
+              overflowY: 'auto',
+              padding: '20px'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <Bell size={18} color="var(--primary)" />
+                <span style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-main)' }}>알림</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAlarmModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+                title="알림 창 닫기"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {(() => {
+              const today = new Date();
+              const endDate = new Date(today);
+              endDate.setDate(today.getDate() + 7);
+              const toDateString = (date) => {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+              };
+              const todayStr = toDateString(today);
+              const endDateStr = toDateString(endDate);
+              const upcoming = events
+                .map((event) => ({ ...event, notificationDate: event.date || event.startDate }))
+                .filter((event) => event.notificationDate && event.notificationDate >= todayStr && event.notificationDate <= endDateStr)
+                .sort((a, b) => a.notificationDate.localeCompare(b.notificationDate))
+                .slice(0, 10);
+
+              if (!alarmSettings.enableEventAlarm) {
+                return (
+                  <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+                    일정 알림이 꺼져 있습니다.<br />아래 버튼을 눌러 설정에서 켜 주세요.
+                  </div>
+                );
+              }
+
+              if (upcoming.length === 0) {
+                return (
+                  <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+                    앞으로 7일 동안 예정된 알림이 없습니다.
+                  </div>
+                );
+              }
+
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {upcoming.map((event) => {
+                    const shift = event.type === 'shift' ? shifts.find((item) => item.id === event.shiftType) : null;
+                    const title = event.type === 'shift'
+                      ? `${shift?.label || '근무'} 근무`
+                      : event.type === 'birthday'
+                        ? `${event.name || '등록된'} 생일`
+                        : event.title || '일정 알림';
+                    return (
+                      <div key={event.id} style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '11px 12px', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: 'var(--bg-card)' }}>
+                        <div style={{ width: '34px', height: '34px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, backgroundColor: 'var(--primary-light)', color: 'var(--primary)' }}>
+                          <Bell size={15} />
+                        </div>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
+                          <div style={{ marginTop: '2px', fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                            {event.notificationDate}{event.time ? ` · ${event.time}` : ''}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+          </div>
+        </div>
+      )}
+
       {/* 4. Add/Edit Shift or Appointment Modal overlay */}
       {showAddModal && (
         <div className="dialog-overlay" onClick={() => setShowAddModal(false)}>
@@ -1943,6 +1847,36 @@ export default function App() {
                               </button>
                             </div>
                           </div>
+
+                          <label
+                            htmlFor="exclude-shift-holidays"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: '9px',
+                              padding: '10px 12px',
+                              border: '1px solid var(--border-color)',
+                              borderRadius: '8px',
+                              backgroundColor: formExcludeHolidays ? 'var(--primary-light)' : 'var(--bg-app)',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            <input
+                              id="exclude-shift-holidays"
+                              type="checkbox"
+                              checked={formExcludeHolidays}
+                              onChange={(e) => setFormExcludeHolidays(e.target.checked)}
+                              style={{ marginTop: '2px', cursor: 'pointer' }}
+                            />
+                            <span style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)' }}>
+                                공휴일·대체공휴일 제외
+                              </span>
+                              <span style={{ fontSize: '10.5px', lineHeight: '1.4', color: 'var(--text-muted)' }}>
+                                선택한 반복 요일이 공휴일 또는 대체공휴일이면 근무를 등록하지 않습니다.
+                              </span>
+                            </span>
+                          </label>
                         </>
                       )}
                     </div>
@@ -2037,7 +1971,7 @@ export default function App() {
 
                   {formIsRange ? (
                     <>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div className="responsive-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                         <div className="settings-form-row">
                           <span className="settings-label">시작일</span>
                           <input 
@@ -2060,7 +1994,7 @@ export default function App() {
                         </div>
                       </div>
                       
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div className="responsive-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                         <div className="settings-form-row">
                           <span className="settings-label">장소</span>
                           <input 
@@ -2107,7 +2041,7 @@ export default function App() {
                     </>
                   ) : (
                     <>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                      <div className="responsive-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                         <div className="settings-form-row">
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                             <span className="settings-label" style={{ margin: 0 }}>시간</span>

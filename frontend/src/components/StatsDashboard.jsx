@@ -288,7 +288,7 @@ export default function StatsDashboard({ events = [], shifts = [], currentDate }
     <div className="stats-dashboard fade-in" style={{ padding: '20px 0', display: 'flex', flexDirection: 'column', gap: '24px' }}>
       
       {/* Header section with Title and Period Switcher */}
-      <div style={{ 
+      <div className="stats-header" style={{
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'center', 
@@ -308,7 +308,7 @@ export default function StatsDashboard({ events = [], shifts = [], currentDate }
         </div>
 
         {/* View toggles & date selector */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="stats-header-controls" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {/* Scope Toggle */}
           <div style={{ 
             display: 'flex', 
@@ -384,7 +384,7 @@ export default function StatsDashboard({ events = [], shifts = [], currentDate }
       </div>
 
       {/* Summary Widget Cards */}
-      <div style={{ 
+      <div className="stats-summary-grid" style={{
         display: 'grid', 
         gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
         gap: '16px' 

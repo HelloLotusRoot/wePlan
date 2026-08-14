@@ -253,7 +253,7 @@ export default function RecordsBoard({
   });
 
   return (
-    <div style={{ padding: '0 20px 40px 20px', width: '100%', maxWidth: '100%', margin: '0 auto' }}>
+    <div className="records-board" style={{ padding: '0 20px 40px 20px', width: '100%', maxWidth: '100%', margin: '0 auto' }}>
       
       {/* Custom Styles */}
       <style>{`
