@@ -13,7 +13,8 @@ import {
   Edit,
   Camera,
   LogOut,
-  X
+  X,
+  ChevronLeft
 } from 'lucide-react';
 
 const DEFAULT_PROFILE_IMAGE = 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=120&auto=format&fit=crop';
@@ -21,15 +22,11 @@ const DEFAULT_PROFILE_IMAGE = 'https://images.unsplash.com/photo-1573496359142-b
 export default function SidebarLeft({ 
   currentTab, 
   setCurrentTab, 
-  sharedUsers, 
   onInviteFriend,
-  isPrivateMode,
   userName,
   setUserName,
   userJob,
   setUserJob,
-  calendarPerspective,
-  setCalendarPerspective,
   showLeftSidebar,
   setShowLeftSidebar,
   user,
@@ -255,7 +252,6 @@ export default function SidebarLeft({
           className="menu-item"
           style={{ 
             width: '100%', 
-            marginBottom: '16px', 
             border: '1px dashed var(--primary)', 
             justifyContent: 'center',
             color: 'var(--primary)',
@@ -266,43 +262,6 @@ export default function SidebarLeft({
           <span>+ 친구 초대하기</span>
         </button>
 
-        <div className="sharing-title">일정 공유 친구</div>
-        <div className="shared-user-avatars" style={{ paddingLeft: '8px' }}>
-          {sharedUsers.filter(u => u.isSharing).map((user, idx) => {
-            const isActivePerspective = calendarPerspective === user.id;
-            return (
-              <div 
-                key={user.id} 
-                className="avatar-overlap"
-                onClick={() => setCalendarPerspective(isActivePerspective ? 'me' : user.id)}
-                title={`${user.name} (${user.relation}) - ${user.privilege} (클릭 시 이 친구에게 공유된 내 일정 확인)`}
-                style={{ 
-                  zIndex: 10 - idx,
-                  borderColor: isActivePerspective ? '#10b981' : (isPrivateMode ? '#cbd5e1' : '#e2e8f0'),
-                  boxShadow: isActivePerspective ? '0 0 8px #10b981' : (isPrivateMode ? 'none' : '0 0 4px rgba(16, 185, 129, 0.4)'),
-                  transform: isActivePerspective ? 'scale(1.15)' : 'scale(1)',
-                  transition: 'all 0.2s ease',
-                  cursor: 'pointer'
-                }}
-              >
-                {user.avatar ? (
-                  <img 
-                    src={user.avatar} 
-                    alt={user.name} 
-                    style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
-                  />
-                ) : (
-                  user.name.substring(0, 2)
-                )}
-              </div>
-            );
-          })}
-          {isPrivateMode && (
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginLeft: '12px' }}>
-              나만 보기 활성
-            </span>
-          )}
-        </div>
       </div>
 
 
@@ -340,11 +299,7 @@ export default function SidebarLeft({
             e.currentTarget.style.borderColor = 'var(--border-color)';
           }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="9" y1="3" x2="9" y2="21"></line>
-            <path d="M15 15l-3-3 3-3"></path>
-          </svg>
+          <ChevronLeft size={16} />
           <span>사이드바 접기</span>
         </button>
       )}

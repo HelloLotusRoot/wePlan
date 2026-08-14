@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getLunarDate, lunarToSolar } from '../utils/lunarCalendar';
 import { getHoliday } from '../utils/holidays';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, MapPin, Sparkles, Cake, Menu, PanelRight, PanelRightClose, Clock, Bell, FileText, Search, ListTodo } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, MapPin, Sparkles, Cake, Menu, FileText, Search, ListTodo, Settings2 } from 'lucide-react';
 
 export default function CalendarGrid({ 
   currentDate, 
@@ -24,6 +24,7 @@ export default function CalendarGrid({
   setCalendarPerspective,
   sharedUsers,
   isReadOnlyPerspective,
+  canEditEvent,
   showRightSidebar,
   setShowRightSidebar,
   currentTab,
@@ -85,7 +86,8 @@ export default function CalendarGrid({
     return (
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', marginLeft: '4px', verticalAlign: 'middle', flexShrink: 0 }}>
         {sharedFriends.map(friend => {
-          const titleText = `${friend.name} (${friend.relation})`;
+          const permissionLabel = evt.sharePermission === 'edit' ? '수정·삭제 가능' : '보기만 가능';
+          const titleText = `${friend.name} (${friend.relation}) · ${permissionLabel}`;
           return (
             <span
               key={friend.id}
@@ -149,6 +151,7 @@ export default function CalendarGrid({
   };
 
   const getBirthdaySolarDateForYear = (evt, targetYear) => {
+    if (evt.repeatYearly === false && Number(evt.date?.slice(0, 4)) !== targetYear) return null;
     if (evt.isLunar) {
       let bdayLunar = getLunarDate(evt.date);
       if (!bdayLunar) {
@@ -512,29 +515,56 @@ export default function CalendarGrid({
 
         {/* Legend */}
         <div className="shift-legend" style={{ border: 'none', boxShadow: 'none', padding: 0 }}>
-          {Array.isArray(shifts) && shifts.map(shift => (
-            <div className="legend-item" key={shift.id}>
-              <span 
-                className="legend-badge" 
-                style={{ 
-                  backgroundColor: shift.color + '25', 
-                  color: shift.color,
-                  border: `1px solid ${shift.color}40`,
-                  padding: '2px 8px',
-                  borderRadius: '4px',
-                  fontSize: '10px',
-                  fontWeight: '600'
-                }}
+          {Array.isArray(shifts) && shifts.length > 0 ? (
+            <>
+              {shifts.map(shift => (
+                <button
+                  type="button"
+                  className="legend-item"
+                  key={shift.id}
+                  onClick={() => calendarPerspective === 'me' && onOpenSettings && onOpenSettings('schedule')}
+                  disabled={calendarPerspective !== 'me'}
+                  title={calendarPerspective === 'me' ? `${shift.label} 근무 유형 수정` : `${shift.label} 근무 유형`}
+                  style={{ border: 'none', background: 'transparent', padding: 0, cursor: calendarPerspective === 'me' ? 'pointer' : 'default' }}
+                >
+                  <span 
+                    className="legend-badge" 
+                    style={{ 
+                      backgroundColor: shift.color + '25', 
+                      color: shift.color,
+                      border: `1px solid ${shift.color}40`,
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      fontSize: '10px',
+                      fontWeight: '600'
+                    }}
+                  >
+                    {shift.label}
+                  </span>
+                  <span style={{ color: 'var(--text-muted)' }}>{shift.start}-{shift.end}</span>
+                </button>
+              ))}
+              {calendarPerspective === 'me' && <button
+                type="button"
+                onClick={() => onOpenSettings && onOpenSettings('schedule')}
+                className="shift-type-manage-btn"
+                title="근무 유형 추가 및 수정"
               >
-                {shift.label}
-              </span>
-              <span style={{ color: 'var(--text-muted)' }}>{shift.start}-{shift.end}</span>
-            </div>
-          ))}
-          <div className="legend-item">
-            <span className="legend-badge appointment" style={{ borderRadius: '50%', width: '8px', height: '8px', padding: 0 }}></span>
-            <span>약속/개인</span>
-          </div>
+                <Settings2 size={12} /> 근무 유형 관리
+              </button>}
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => calendarPerspective === 'me' && onOpenSettings && onOpenSettings('schedule')}
+              disabled={calendarPerspective !== 'me'}
+              className="shift-type-manage-btn"
+              style={{ cursor: calendarPerspective === 'me' ? 'pointer' : 'default' }}
+            >
+              <Settings2 size={12} />
+              근무 유형 설정
+            </button>
+          )}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -682,7 +712,7 @@ export default function CalendarGrid({
               }}
               title={showRightSidebar ? "상세 보기 패널 닫기" : "상세 보기 패널 열기"}
             >
-              {showRightSidebar ? <PanelRightClose size={16} /> : <PanelRight size={16} />}
+              {showRightSidebar ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
             </button>
           </div>
         </div>
@@ -790,7 +820,10 @@ export default function CalendarGrid({
                   }
                   const data = Array.isArray(shifts) ? shifts.find(s => s.id === evt.shiftType) : null;
                   return { event: evt, data };
-                }).filter(item => item.data !== null)
+                // A saved shift event can outlive its shift preset after the preset is
+                // edited or deleted. Exclude those orphaned events so one stale record
+                // cannot stop the entire month from rendering.
+                }).filter(item => Boolean(item.data))
                   .sort((a, b) => (a.data.start || '').localeCompare(b.data.start || ''));
 
                 // Determine the primary (representative) shift for this day
@@ -911,7 +944,7 @@ export default function CalendarGrid({
                       )}
 
                       {dayShiftsData.length > 0 && (
-                        <div style={{ 
+                        <div className="day-shift-badges" style={{ 
                           display: 'flex', 
                           gap: '3px', 
                           flexWrap: 'wrap', 
@@ -927,6 +960,7 @@ export default function CalendarGrid({
                             return (
                               <span 
                                 key={sData.event.id || sIdx}
+                                className="day-shift-badge"
                                 onClick={canToggle ? (e) => {
                                   e.stopPropagation();
                                   setPrimaryShiftMap(prev => ({ ...prev, [dateStr]: sData.data.id }));
@@ -952,7 +986,7 @@ export default function CalendarGrid({
                                   : `${sData.data.label} (${sData.data.start} ~ ${sData.data.end})${sData.event.overtimeHours ? `, 초과근무: ${sData.event.overtimeHours}시간` : ''}`
                                 }
                               >
-                                <span>{sData.data.label}</span>
+                                <span className="day-shift-badge-label">{sData.data.label}</span>
                                 {sData.event.overtimeHours ? (
                                   <span style={{ fontSize: '9px', opacity: 0.85, marginLeft: '1px' }}>
                                     (+{sData.event.overtimeHours}h)
@@ -1083,8 +1117,8 @@ export default function CalendarGrid({
                                     <div 
                                       key={evt.id} 
                                       className="appointment-dot-item"
-                                      draggable={!isReadOnlyPerspective}
-                                      onDragStart={(e) => !isReadOnlyPerspective && handleDragStart(e, evt.id)}
+                                      draggable={canEditEvent ? canEditEvent(evt) : !isReadOnlyPerspective}
+                                      onDragStart={(e) => (canEditEvent ? canEditEvent(evt) : !isReadOnlyPerspective) && handleDragStart(e, evt.id)}
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         onEditEvent && onEditEvent(evt);
@@ -1110,8 +1144,8 @@ export default function CalendarGrid({
                                     <div 
                                       key={evt.id} 
                                       className={`appointment-box-item ${isPrivate ? 'private' : ''}`}
-                                      draggable={!isReadOnlyPerspective}
-                                      onDragStart={(e) => !isReadOnlyPerspective && handleDragStart(e, evt.id)}
+                                      draggable={canEditEvent ? canEditEvent(evt) : !isReadOnlyPerspective}
+                                      onDragStart={(e) => (canEditEvent ? canEditEvent(evt) : !isReadOnlyPerspective) && handleDragStart(e, evt.id)}
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         onEditEvent && onEditEvent(evt);
@@ -1233,14 +1267,14 @@ export default function CalendarGrid({
                   
                   const isPrivate = evt.isPrivate && isPrivateMode;
                   
-                  const leftGap = isActualStart ? '8px' : '2px';
-                  const rightGap = isActualEnd ? '8px' : '2px';
+                  const leftGap = isActualStart ? '8px' : '0';
+                  const rightGap = isActualEnd ? '8px' : '0';
                   
                   return (
                     <div 
                       key={evt.id}
-                      draggable={!isReadOnlyPerspective}
-                      onDragStart={(e) => !isReadOnlyPerspective && handleDragStart(e, evt.id)}
+                      draggable={canEditEvent ? canEditEvent(evt) : !isReadOnlyPerspective}
+                      onDragStart={(e) => (canEditEvent ? canEditEvent(evt) : !isReadOnlyPerspective) && handleDragStart(e, evt.id)}
                       onClick={(e) => {
                         e.stopPropagation();
                         onEditEvent && onEditEvent(evt);
@@ -1288,44 +1322,6 @@ export default function CalendarGrid({
         })}
       </div>
 
-      {/* Settings Navigation Buttons */}
-      {calendarPerspective === 'me' && (
-      <div style={{ 
-        display: 'flex', 
-        gap: '10px', 
-        justifyContent: 'center', 
-        marginTop: '20px', 
-        paddingTop: '16px',
-        borderTop: '1px solid var(--border-color)',
-        flexWrap: 'wrap' 
-      }}>
-        <button 
-          onClick={() => onOpenSettings && onOpenSettings('schedule')} 
-          className="btn-secondary"
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: '#ffffff' }}
-        >
-          <Clock size={15} color="var(--primary)" />
-          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-main)' }}>근무 유형 설정</span>
-        </button>
-        <button 
-          onClick={() => onOpenSettings && onOpenSettings('alarm')} 
-          className="btn-secondary"
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: '#ffffff' }}
-        >
-          <Bell size={15} color="var(--primary)" />
-          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-main)' }}>알림 설정</span>
-        </button>
-        <button 
-          onClick={() => onOpenSettings && onOpenSettings('birthday')} 
-          className="btn-secondary"
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: '#ffffff' }}
-        >
-          <Cake size={15} color="#db2777" />
-          <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-main)' }}>생일 설정</span>
-        </button>
-      </div>
-      )}
     </div>
   );
 }
-

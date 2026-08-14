@@ -52,9 +52,16 @@ public class CalendarEvent {
     private Boolean isLunar;
     private Boolean alarmOnDay;
     private Boolean alarmWeekBefore;
+    private Boolean repeatYearly;
+
+    // Per-event alarm fields (appointments and trips)
+    private Boolean alarmEnabled;
+    private String alarmTime;
+    private String alarmDateTime;
     
     // Sharing fields
     private String shareScope; // "public", "private", "custom"
+    private String sharePermission; // "view" or "edit"
     
     private String displayMode; // "dot" or "box"
     

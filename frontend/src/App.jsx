@@ -28,7 +28,7 @@ import {
   CalendarDays,
   Cake
 } from 'lucide-react';
-import { lunarToSolar } from './utils/lunarCalendar';
+import { getLunarDate, lunarToSolar } from './utils/lunarCalendar';
 import { fetchHolidays, getHoliday } from './utils/holidays';
 import { api } from './utils/api';
 
@@ -83,6 +83,34 @@ const INITIAL_SHARED_USERS = [
   { id: 'user-2', name: '가족', relation: '가족', privilege: '편집 가능', avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?q=80&w=80&auto=format&fit=crop', isSharing: true },
   { id: 'user-3', name: '현지', relation: '친구', privilege: '보기 가능', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=80&auto=format&fit=crop', isSharing: true }
 ];
+
+const getBirthdayDateForYear = (event, targetYear) => {
+  if (!event?.date) return null;
+  const registeredYear = Number(event.date.slice(0, 4));
+  if (event.repeatYearly === false && registeredYear !== targetYear) return null;
+
+  if (!event.isLunar) return `${targetYear}-${event.date.slice(5)}`;
+
+  const lunarDate = getLunarDate(event.date) || getLunarDate(`2024-${event.date.slice(5)}`);
+  if (!lunarDate) return `${targetYear}-${event.date.slice(5)}`;
+
+  const clean = lunarDate.replace('음력 ', '');
+  const isLeap = clean.startsWith('윤');
+  const [month, day] = clean.replace('윤', '').split('.').map(Number);
+  return lunarToSolar(targetYear, month, day, isLeap) || `${targetYear}-${event.date.slice(5)}`;
+};
+
+const getDefaultAlarmDateTime = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(`${dateString}T18:00:00`);
+  date.setDate(date.getDate() - 1);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hour = String(date.getHours()).padStart(2, '0');
+  const minute = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+};
 
 const shiftMockDatesToCurrentMonth = (eventList) => {
   if (!Array.isArray(eventList)) return [];
@@ -297,7 +325,7 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState('calendar');
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showAlarmModal, setShowAlarmModal] = useState(false);
-  const [settingsModalTab, setSettingsModalTab] = useState('schedule'); // 'schedule' | 'alarm' | 'birthday'
+  const [settingsModalTab, setSettingsModalTab] = useState('schedule'); // 'schedule' | 'alarm'
   const [rightSidebarWidth, setRightSidebarWidth] = useState(() => {
     const saved = localStorage.getItem('weplan_right_sidebar_width');
     const parsed = saved ? parseInt(saved, 10) : 340;
@@ -363,7 +391,7 @@ export default function App() {
   const [editTarget, setEditTarget] = useState(null);
   const [viewTarget, setViewTarget] = useState(null); // 상세보기 대상 이벤트
 
-  const [formType, setFormType] = useState('shift'); // shift, appointment
+  const [formType, setFormType] = useState('shift'); // shift, appointment, birthday
   const [formShiftType, setFormShiftType] = useState('day');
   const [formShiftRange, setFormShiftRange] = useState('single'); // single, custom
   const [formShiftDays, setFormShiftDays] = useState({ 1: false, 2: false, 3: false, 4: false, 5: false, 6: false, 0: false }); // 1: Mon, ..., 0: Sun
@@ -380,6 +408,14 @@ export default function App() {
   const [formAptIsAllDay, setFormAptIsAllDay] = useState(false);
   const [formAptPlace, setFormAptPlace] = useState('');
   const [formAptIsPrivate, setFormAptIsPrivate] = useState(false);
+  const [formEventAlarmEnabled, setFormEventAlarmEnabled] = useState(true);
+  const [formEventAlarmTime, setFormEventAlarmTime] = useState('전날 18:00');
+  const [formEventAlarmDateTime, setFormEventAlarmDateTime] = useState('');
+  const [formBdayName, setFormBdayName] = useState('');
+  const [formBdayIsLunar, setFormBdayIsLunar] = useState(false);
+  const [formBdayAlarmOnDay, setFormBdayAlarmOnDay] = useState(true);
+  const [formBdayAlarmWeekBefore, setFormBdayAlarmWeekBefore] = useState(false);
+  const [formBdayRepeatYearly, setFormBdayRepeatYearly] = useState(true);
   const [formIsRange, setFormIsRange] = useState(false);
   const [formTripStart, setFormTripStart] = useState('');
   const [formTripEnd, setFormTripEnd] = useState('');
@@ -387,6 +423,7 @@ export default function App() {
   const [formAptDisplayMode, setFormAptDisplayMode] = useState('dot'); // 'dot' or 'box'
   const [calendarPerspective, setCalendarPerspective] = useState('me'); // 'me' | sharedUser.id
   const [formShareScope, setFormShareScope] = useState('public'); // 'public' | 'private' | 'custom'
+  const [formSharePermission, setFormSharePermission] = useState('view'); // 'view' | 'edit'
   const [formSharedWithIds, setFormSharedWithIds] = useState([]); // array of sharedUser IDs
   const [formInlineShareName, setFormInlineShareName] = useState('');
   const [formInlineShareRelation, setFormInlineShareRelation] = useState(() => relationGroups[0] || '친구');
@@ -764,13 +801,22 @@ export default function App() {
     setFormAptIsAllDay(false);
     setFormAptPlace('');
     setFormAptIsPrivate(false);
+    setFormEventAlarmEnabled(false);
+    setFormEventAlarmTime(alarmSettings.eventAlarmTime || '전날 18:00');
+    setFormEventAlarmDateTime(getDefaultAlarmDateTime(dateStr));
+    setFormBdayName('');
+    setFormBdayIsLunar(false);
+    setFormBdayAlarmOnDay(true);
+    setFormBdayAlarmWeekBefore(false);
+    setFormBdayRepeatYearly(true);
     setFormIsRange(false);
     setFormTripStart(dateStr);
     setFormTripEnd(dateStr);
     setFormTripColor('blue');
     setFormAptDisplayMode('dot');
-    setFormShareScope('public');
-    setFormSharedWithIds(sharedUsers.map(u => u.id));
+    setFormShareScope('private');
+    setFormSharePermission('view');
+    setFormSharedWithIds([]);
     setShowAddModal(true);
   };
 
@@ -789,6 +835,17 @@ export default function App() {
       setFormShiftOvertime(otVal);
       setFormShiftHasOvertime(otVal > 0);
       setFormShiftRange('single');
+    } else if (evt.type === 'birthday') {
+      setFormType('birthday');
+      setFormIsRange(false);
+      setFormBdayName(evt.name || '');
+      setFormBdayIsLunar(Boolean(evt.isLunar));
+      setFormBdayAlarmOnDay(evt.alarmOnDay !== false);
+      setFormBdayAlarmWeekBefore(Boolean(evt.alarmWeekBefore));
+      setFormBdayRepeatYearly(evt.repeatYearly !== false);
+      setFormTripStart(evt.date || selectedDay);
+      setFormEventAlarmEnabled(evt.alarmEnabled ?? (evt.alarmOnDay !== false || Boolean(evt.alarmWeekBefore)));
+      setFormEventAlarmDateTime(evt.alarmDateTime || getDefaultAlarmDateTime(evt.date || selectedDay));
     } else if (evt.type === 'trip') {
       setFormType('appointment');
       setFormIsRange(true);
@@ -800,6 +857,9 @@ export default function App() {
       setFormAptIsAllDay(false);
       setFormAptPlace(evt.place || '');
       setFormAptIsPrivate(false);
+      setFormEventAlarmEnabled(evt.alarmEnabled ?? (alarmSettings.enableEventAlarm !== false));
+      setFormEventAlarmTime(evt.alarmTime || alarmSettings.eventAlarmTime || '전날 18:00');
+      setFormEventAlarmDateTime(evt.alarmDateTime || getDefaultAlarmDateTime(evt.startDate || evt.date || selectedDay));
     } else {
       setFormType('appointment');
       setFormIsRange(false);
@@ -812,10 +872,14 @@ export default function App() {
       setFormAptPlace(evt.place || '');
       setFormAptIsPrivate(evt.isPrivate || false);
       setFormAptDisplayMode(evt.displayMode || 'dot');
+      setFormEventAlarmEnabled(evt.alarmEnabled ?? (alarmSettings.enableEventAlarm !== false));
+      setFormEventAlarmTime(evt.alarmTime || alarmSettings.eventAlarmTime || '전날 18:00');
+      setFormEventAlarmDateTime(evt.alarmDateTime || getDefaultAlarmDateTime(evt.date || selectedDay));
     }
     const scope = evt.shareScope || (evt.isPrivate ? 'private' : 'public');
     const sharedWith = evt.sharedWith || (evt.isPrivate ? [] : sharedUsers.map(u => u.id));
     setFormShareScope(scope);
+    setFormSharePermission(evt.sharePermission === 'edit' ? 'edit' : 'view');
     setFormSharedWithIds(sharedWith);
     setShowAddModal(true);
   };
@@ -842,6 +906,19 @@ export default function App() {
         if (evt.id === editTarget.id) {
           if (formType === 'shift') {
             return { ...evt, shiftType: formShiftType, type: 'shift', overtimeHours: parseFloat(formShiftHasOvertime ? formShiftOvertime : 0) || 0 };
+          } else if (formType === 'birthday') {
+            return {
+              ...evt,
+              type: 'birthday',
+              name: formBdayName,
+              date: formTripStart,
+              isLunar: formBdayIsLunar,
+              alarmOnDay: formBdayAlarmOnDay,
+              alarmWeekBefore: formBdayAlarmWeekBefore,
+              repeatYearly: formBdayRepeatYearly,
+              alarmEnabled: formEventAlarmEnabled,
+              alarmDateTime: formEventAlarmDateTime
+            };
           } else if (formIsRange) {
             return { 
               ...evt, 
@@ -853,8 +930,12 @@ export default function App() {
               color: formTripColor,
               date: undefined,
               shareScope: formShareScope,
+              sharePermission: formSharePermission,
               sharedWith: formSharedWithIds,
-              isPrivate: formShareScope === 'private'
+              isPrivate: formShareScope === 'private',
+              alarmEnabled: formEventAlarmEnabled,
+              alarmTime: formEventAlarmTime,
+              alarmDateTime: formEventAlarmDateTime
             };
           } else {
             return { 
@@ -869,8 +950,12 @@ export default function App() {
               startDate: undefined,
               endDate: undefined,
               shareScope: formShareScope,
+              sharePermission: formSharePermission,
               sharedWith: formSharedWithIds,
-              color: formTripColor
+              color: formTripColor,
+              alarmEnabled: formEventAlarmEnabled,
+              alarmTime: formEventAlarmTime,
+              alarmDateTime: formEventAlarmDateTime
             };
           }
         }
@@ -960,6 +1045,16 @@ export default function App() {
         
         setShowAddModal(false);
         return;
+      } else if (formType === 'birthday') {
+        newEvent.type = 'birthday';
+        newEvent.name = formBdayName;
+        newEvent.date = formTripStart;
+        newEvent.isLunar = formBdayIsLunar;
+        newEvent.alarmOnDay = formBdayAlarmOnDay;
+        newEvent.alarmWeekBefore = formBdayAlarmWeekBefore;
+        newEvent.repeatYearly = formBdayRepeatYearly;
+        newEvent.alarmEnabled = formEventAlarmEnabled;
+        newEvent.alarmDateTime = formEventAlarmDateTime;
       } else if (formIsRange) {
         newEvent.type = 'trip';
         newEvent.title = formAptTitle;
@@ -968,8 +1063,12 @@ export default function App() {
         newEvent.place = formAptPlace;
         newEvent.color = formTripColor;
         newEvent.shareScope = formShareScope;
+        newEvent.sharePermission = formSharePermission;
         newEvent.sharedWith = formSharedWithIds;
         newEvent.isPrivate = formShareScope === 'private';
+        newEvent.alarmEnabled = formEventAlarmEnabled;
+        newEvent.alarmTime = formEventAlarmTime;
+        newEvent.alarmDateTime = formEventAlarmDateTime;
       } else {
         newEvent.type = 'appointment';
         newEvent.date = selectedDay;
@@ -979,8 +1078,12 @@ export default function App() {
         newEvent.isPrivate = formShareScope === 'private';
         newEvent.displayMode = formAptDisplayMode;
         newEvent.shareScope = formShareScope;
+        newEvent.sharePermission = formSharePermission;
         newEvent.sharedWith = formSharedWithIds;
         newEvent.color = formTripColor;
+        newEvent.alarmEnabled = formEventAlarmEnabled;
+        newEvent.alarmTime = formEventAlarmTime;
+        newEvent.alarmDateTime = formEventAlarmDateTime;
       }
       setEvents(prev => [...prev, newEvent]);
     }
@@ -996,7 +1099,8 @@ export default function App() {
       date: bdayData.date,
       isLunar: bdayData.isLunar,
       alarmOnDay: bdayData.alarmOnDay,
-      alarmWeekBefore: bdayData.alarmWeekBefore
+      alarmWeekBefore: bdayData.alarmWeekBefore,
+      repeatYearly: bdayData.repeatYearly !== false
     };
     setEvents(prev => [...prev, newBday]);
   };
@@ -1032,6 +1136,15 @@ export default function App() {
 
   const selectedPerspectiveUser = sharedUsers.find(u => u.id === calendarPerspective);
   const isReadOnlyPerspective = calendarPerspective !== 'me' && (!selectedPerspectiveUser || !selectedPerspectiveUser.privilege.includes('편집'));
+  const canEditEvent = (event) => {
+    if (calendarPerspective === 'me') return true;
+    if (!event || event.sharePermission !== 'edit') return false;
+    const scope = event.shareScope || (event.isPrivate ? 'private' : 'public');
+    if (scope === 'private') return false;
+    if (scope === 'public') return true;
+    return scope === 'custom' && (event.sharedWith || []).includes(calendarPerspective);
+  };
+  const isEventFormReadOnly = editTarget ? !canEditEvent(editTarget) : isReadOnlyPerspective;
 
   if (isLoggingIn) {
     return (
@@ -1126,6 +1239,7 @@ export default function App() {
             calendarPerspective={calendarPerspective}
             sharedUsers={sharedUsers}
             isReadOnlyPerspective={isReadOnlyPerspective}
+            canEditEvent={canEditEvent}
             settings={settings}
             memos={memos}
             setMemos={setMemos}
@@ -1326,6 +1440,7 @@ export default function App() {
               setCalendarPerspective={setCalendarPerspective}
               sharedUsers={sharedUsers}
               isReadOnlyPerspective={isReadOnlyPerspective}
+              canEditEvent={canEditEvent}
               showRightSidebar={showRightSidebar}
               setShowRightSidebar={setShowRightSidebar}
               currentTab={currentTab}
@@ -1357,7 +1472,7 @@ export default function App() {
           ? `${evt.startDate} ~ ${evt.endDate}`
           : (evt.date || selectedDay);
         const displayTime = isBirthday
-          ? (evt.isLunar ? '음력 생일' : '양력 생일')
+          ? `${evt.isLunar ? '음력 생일' : '양력 생일'} · ${evt.repeatYearly === false ? '올해만 표시' : '매년 반복'}`
           : isShift && shiftData
             ? `${shiftData.start} - ${shiftData.end}`
             : evt.time || '하루 종일';
@@ -1476,7 +1591,7 @@ export default function App() {
               </div>
 
               {/* 하단 수정 / 삭제 버튼 */}
-              {!isReadOnlyPerspective && !isBirthday && (
+              {canEditEvent(evt) && !isBirthday && (
                 <div style={{
                   padding: '12px 20px 20px 20px',
                   display: 'flex', gap: '8px', justifyContent: 'flex-end',
@@ -1522,8 +1637,12 @@ export default function App() {
             {/* Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '8px' }}>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <Settings size={18} color="var(--primary)" />
-                <span style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-main)' }}>설정</span>
+                {settingsModalTab === 'schedule' && <Clock size={18} color="var(--primary)" />}
+                {settingsModalTab === 'alarm' && <Bell size={18} color="var(--primary)" />}
+                <span style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-main)' }}>
+                  {settingsModalTab === 'schedule' && '근무 유형 설정'}
+                  {settingsModalTab === 'alarm' && '알림 설정'}
+                </span>
               </div>
               <button 
                 onClick={() => setShowSettingsModal(false)}
@@ -1533,33 +1652,8 @@ export default function App() {
               </button>
             </div>
 
-            {/* Modal Tabs */}
-            <div style={{ display: 'flex', gap: '4px', backgroundColor: '#f1f5f9', padding: '4px', borderRadius: '8px', marginBottom: '12px' }}>
-              <button 
-                onClick={() => setSettingsModalTab('schedule')} 
-                className={`view-toggle-btn ${settingsModalTab === 'schedule' ? 'active' : ''}`}
-                style={{ flex: 1, padding: '6px', fontSize: '12px', borderRadius: '6px', cursor: 'pointer' }}
-              >
-                근무 유형
-              </button>
-              <button 
-                onClick={() => setSettingsModalTab('alarm')} 
-                className={`view-toggle-btn ${settingsModalTab === 'alarm' ? 'active' : ''}`}
-                style={{ flex: 1, padding: '6px', fontSize: '12px', borderRadius: '6px', cursor: 'pointer' }}
-              >
-                알림 설정
-              </button>
-              <button 
-                onClick={() => setSettingsModalTab('birthday')} 
-                className={`view-toggle-btn ${settingsModalTab === 'birthday' ? 'active' : ''}`}
-                style={{ flex: 1, padding: '6px', fontSize: '12px', borderRadius: '6px', cursor: 'pointer' }}
-              >
-                생일 설정
-              </button>
-            </div>
-
             {/* Content: SettingsPanels */}
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, marginTop: '12px' }}>
               <SettingsPanels 
                 shifts={shifts}
                 setShifts={setShifts}
@@ -1576,7 +1670,7 @@ export default function App() {
                 hideSharedSettings={true}
                 onlyScheduleSettings={settingsModalTab === 'schedule'}
                 onlyAlarmSettings={settingsModalTab === 'alarm'}
-                onlyBirthdaySettings={settingsModalTab === 'birthday'}
+                hidePanelTitles={true}
                 relationGroups={relationGroups}
                 setRelationGroups={setRelationGroups}
                 calendarPerspective={calendarPerspective}
@@ -1630,7 +1724,84 @@ export default function App() {
               const todayStr = toDateString(today);
               const endDateStr = toDateString(endDate);
               const upcoming = events
-                .map((event) => ({ ...event, notificationDate: event.date || event.startDate }))
+                .map((event) => {
+                  if (event.type === 'birthday') {
+                    const birthdayAlarmEnabled = event.alarmEnabled ?? (event.alarmOnDay !== false || Boolean(event.alarmWeekBefore));
+                    if (!birthdayAlarmEnabled) return { ...event, notificationDate: null };
+
+                    const candidateYears = [...new Set([today.getFullYear(), endDate.getFullYear()])];
+                    const registeredYear = Number(event.date?.slice(0, 4));
+                    const registeredBirthday = getBirthdayDateForYear(event, registeredYear) || event.date;
+                    const registeredAlarm = event.alarmDateTime ? new Date(event.alarmDateTime) : null;
+                    const registeredBirthdayDate = registeredBirthday ? new Date(`${registeredBirthday}T00:00:00`) : null;
+                    const alarmOffset = registeredAlarm && registeredBirthdayDate && !Number.isNaN(registeredAlarm.getTime())
+                      ? registeredBirthdayDate.getTime() - registeredAlarm.getTime()
+                      : (event.alarmWeekBefore && !event.alarmOnDay ? 7 * 24 * 60 * 60 * 1000 : 0);
+
+                    const birthdayAlarm = candidateYears
+                      .map((year) => {
+                        const birthdayDate = getBirthdayDateForYear(event, year);
+                        if (!birthdayDate) return null;
+                        return new Date(new Date(`${birthdayDate}T00:00:00`).getTime() - alarmOffset);
+                      })
+                      .find((date) => date && toDateString(date) >= todayStr && toDateString(date) <= endDateStr);
+
+                    return {
+                      ...event,
+                      notificationDate: birthdayAlarm ? toDateString(birthdayAlarm) : null,
+                      alarmDisplay: birthdayAlarm
+                        ? birthdayAlarm.toLocaleString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                        : undefined
+                    };
+                  }
+
+                  const alarmEnabled = event.alarmEnabled ?? (alarmSettings.enableEventAlarm !== false);
+                  if (!alarmEnabled) return { ...event, notificationDate: null };
+
+                  const eventDate = event.date || event.startDate;
+                  if (!eventDate) return { ...event, notificationDate: null };
+
+                  if (event.alarmDateTime) {
+                    const customAlarmDate = new Date(event.alarmDateTime);
+                    if (!Number.isNaN(customAlarmDate.getTime())) {
+                      return {
+                        ...event,
+                        notificationDate: toDateString(customAlarmDate),
+                        alarmDisplay: customAlarmDate.toLocaleString('ko-KR', {
+                          month: 'long',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })
+                      };
+                    }
+                  }
+
+                  const alarmTime = event.alarmTime || alarmSettings.eventAlarmTime || '전날 18:00';
+                  const alarmDate = new Date(`${eventDate}T${event.time || '09:00'}:00`);
+                  const fixedClock = alarmTime.match(/(\d{2}):(\d{2})/);
+                  if (fixedClock) alarmDate.setHours(Number(fixedClock[1]), Number(fixedClock[2]), 0, 0);
+                  const relativeMinutes = {
+                    '10분 전': 10,
+                    '30분 전': 30,
+                    '1시간 전': 60,
+                    '2시간 전': 120
+                  };
+
+                  if (relativeMinutes[alarmTime]) {
+                    alarmDate.setMinutes(alarmDate.getMinutes() - relativeMinutes[alarmTime]);
+                  } else if (alarmTime.startsWith('전날')) {
+                    alarmDate.setDate(alarmDate.getDate() - 1);
+                  } else if (alarmTime.startsWith('2일 전')) {
+                    alarmDate.setDate(alarmDate.getDate() - 2);
+                  } else if (alarmTime.startsWith('3일 전')) {
+                    alarmDate.setDate(alarmDate.getDate() - 3);
+                  } else if (alarmTime.startsWith('일주일 전')) {
+                    alarmDate.setDate(alarmDate.getDate() - 7);
+                  }
+
+                  return { ...event, alarmTime, notificationDate: toDateString(alarmDate) };
+                })
                 .filter((event) => event.notificationDate && event.notificationDate >= todayStr && event.notificationDate <= endDateStr)
                 .sort((a, b) => a.notificationDate.localeCompare(b.notificationDate))
                 .slice(0, 10);
@@ -1668,7 +1839,12 @@ export default function App() {
                         <div style={{ minWidth: 0, flex: 1 }}>
                           <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
                           <div style={{ marginTop: '2px', fontSize: '10.5px', color: 'var(--text-muted)' }}>
-                            {event.notificationDate}{event.time ? ` · ${event.time}` : ''}
+                            {event.notificationDate}
+                            {event.alarmDisplay
+                              ? ` · ${event.alarmDisplay}`
+                              : (event.type !== 'birthday' && event.alarmTime
+                                ? ` · ${event.alarmTime}`
+                                : (event.time ? ` · ${event.time}` : ''))}
                           </div>
                         </div>
                       </div>
@@ -1685,7 +1861,7 @@ export default function App() {
       {/* 4. Add/Edit Shift or Appointment Modal overlay */}
       {showAddModal && (
         <div className="dialog-overlay" onClick={() => setShowAddModal(false)}>
-          <div className="dialog-content" onClick={(e) => e.stopPropagation()}>
+          <div className="dialog-content add-event-dialog" onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ fontSize: '16px', fontWeight: '700' }}>
                 {editTarget ? '일정 수정하기' : `${selectedDay} 일정 추가`}
@@ -1695,7 +1871,7 @@ export default function App() {
               </button>
             </div>
 
-            {isReadOnlyPerspective && (
+            {isEventFormReadOnly && (
               <div style={{
                 color: '#ef4444',
                 backgroundColor: '#fee2e2',
@@ -1711,11 +1887,11 @@ export default function App() {
             )}
 
             <form onSubmit={handleFormSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <fieldset disabled={isReadOnlyPerspective} style={{ border: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <fieldset disabled={isEventFormReadOnly} style={{ border: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '14px' }}>
               
               {/* Type Switch (Only show if not editing or editing a non-trip event) */}
               {!editTarget && (
-                <div className="solar-lunar-btn-group">
+                <div className="solar-lunar-btn-group event-type-switch">
                   <button 
                     type="button" 
                     className={`solar-lunar-btn ${formType === 'shift' ? 'active' : ''}`}
@@ -1729,6 +1905,13 @@ export default function App() {
                     onClick={() => setFormType('appointment')}
                   >
                     일정 / 약속
+                  </button>
+                  <button
+                    type="button"
+                    className={`solar-lunar-btn ${formType === 'birthday' ? 'active' : ''}`}
+                    onClick={() => setFormType('birthday')}
+                  >
+                    생일
                   </button>
                 </div>
               )}
@@ -1943,20 +2126,6 @@ export default function App() {
               {/* Form Content: Appointment */}
               {formType === 'appointment' && (
                 <>
-                  <div className="toggle-switch-row" style={{ margin: '4px 0 10px 0' }}>
-                    <span className="settings-label" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
-                      기간 설정
-                    </span>
-                    <label className="switch">
-                      <input 
-                        type="checkbox" 
-                        checked={formIsRange}
-                        onChange={(e) => setFormIsRange(e.target.checked)}
-                      />
-                      <span className="slider"></span>
-                    </label>
-                  </div>
-
                   <div className="settings-form-row">
                     <span className="settings-label">일정 제목</span>
                     <input 
@@ -1967,6 +2136,23 @@ export default function App() {
                       onChange={(e) => setFormAptTitle(e.target.value)}
                       required 
                     />
+                  </div>
+
+                  <div className="toggle-switch-row" style={{ margin: '4px 0 10px 0' }}>
+                    <span className="settings-label" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
+                      기간 설정
+                    </span>
+                    <label className="switch">
+                      <input 
+                        type="checkbox" 
+                        checked={formIsRange}
+                        onChange={(e) => {
+                          const nextIsRange = e.target.checked;
+                          setFormIsRange(nextIsRange);
+                        }}
+                      />
+                      <span className="slider"></span>
+                    </label>
                   </div>
 
                   {formIsRange ? (
@@ -2007,7 +2193,7 @@ export default function App() {
                         </div>
                         <div className="settings-form-row">
                           <span className="settings-label">배너 색상</span>
-                          <div style={{ display: 'flex', gap: '8px', marginTop: '6px', alignItems: 'center' }}>
+                          <div className="event-color-picker-row" style={{ display: 'flex', gap: '8px', marginTop: '6px', alignItems: 'center' }}>
                             {[
                               { value: 'blue', hex: '#3b82f6', label: '파란색' },
                               { value: 'purple', hex: '#a855f7', label: '보라색' },
@@ -2100,7 +2286,7 @@ export default function App() {
 
                       <div className="settings-form-row" style={{ marginTop: '10px' }}>
                         <span className="settings-label">일정 색상</span>
-                        <div style={{ display: 'flex', gap: '8px', marginTop: '6px', alignItems: 'center' }}>
+                        <div className="event-color-picker-row" style={{ display: 'flex', gap: '8px', marginTop: '6px', alignItems: 'center' }}>
                           {[
                             { value: 'blue', hex: '#3b82f6', label: '파란색' },
                             { value: 'purple', hex: '#a855f7', label: '보라색' },
@@ -2209,49 +2395,104 @@ export default function App() {
                     </>
                   )}
 
-                  <div className="settings-form-row" style={{ marginTop: '10px' }}>
-                    <span className="settings-label" style={{ fontWeight: '700', marginBottom: '6px', display: 'block' }}>
-                      공유 범위 설정 (일정 공개 대상)
-                    </span>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: '#f8fafc', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                      {/* Option 1: 나만 보기 */}
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', cursor: 'pointer' }}>
-                        <input 
-                          type="radio" 
-                          name="shareScope" 
-                          checked={formShareScope === 'private'}
-                          onChange={() => {
-                            setFormShareScope('private');
-                            setFormSharedWithIds([]);
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div className="toggle-switch-row">
+                      <span className="settings-label">일정 알림</span>
+                      <label className="switch">
+                        <input
+                          type="checkbox"
+                          checked={formEventAlarmEnabled}
+                          onChange={(e) => setFormEventAlarmEnabled(e.target.checked)}
+                        />
+                        <span className="slider"></span>
+                      </label>
+                    </div>
+
+                    {formEventAlarmEnabled && (
+                      <div className="settings-form-row fade-in">
+                        <span className="settings-label">알림 날짜와 시간</span>
+                        <input
+                          type="datetime-local"
+                          className="input-text"
+                          value={formEventAlarmDateTime}
+                          onChange={(e) => setFormEventAlarmDateTime(e.target.value)}
+                          required
+                        />
+                        <span style={{ marginTop: '4px', fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                          원하는 알림 날짜와 시간을 직접 선택하세요.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '10px' }}>
+                    <div className="toggle-switch-row">
+                      <span className="settings-label">일정 공유</span>
+                      <label className="switch">
+                        <input
+                          type="checkbox"
+                          checked={formShareScope !== 'private'}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormShareScope('public');
+                              setFormSharePermission('view');
+                              setFormSharedWithIds(sharedUsers.map(user => user.id));
+                            } else {
+                              setFormShareScope('private');
+                              setFormSharedWithIds([]);
+                            }
                           }}
                         />
-                        <span>나만 보기 (비공개)</span>
+                        <span className="slider"></span>
                       </label>
+                    </div>
 
-                      {/* Option 2: 전체 공개 */}
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', cursor: 'pointer' }}>
-                        <input 
-                          type="radio" 
-                          name="shareScope" 
-                          checked={formShareScope === 'public'}
-                          onChange={() => {
-                            setFormShareScope('public');
-                            setFormSharedWithIds(sharedUsers.map(u => u.id));
-                          }}
-                        />
-                        <span>전체 공개 (연동된 모든 친구)</span>
-                      </label>
+                    {formShareScope !== 'private' && (
+                    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div className="settings-form-row">
+                        <span className="settings-label">공유 권한</span>
+                        <div className="solar-lunar-btn-group" style={{ marginTop: '6px' }}>
+                          <button
+                            type="button"
+                            className={`solar-lunar-btn ${formSharePermission === 'view' ? 'active' : ''}`}
+                            onClick={() => setFormSharePermission('view')}
+                          >
+                            보기만 가능
+                          </button>
+                          <button
+                            type="button"
+                            className={`solar-lunar-btn ${formSharePermission === 'edit' ? 'active' : ''}`}
+                            onClick={() => setFormSharePermission('edit')}
+                          >
+                            수정·삭제 가능
+                          </button>
+                        </div>
+                      </div>
 
-                      {/* Option 3: 특정 친구 선택 */}
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', cursor: 'pointer' }}>
-                        <input 
-                          type="radio" 
-                          name="shareScope" 
-                          checked={formShareScope === 'custom'}
-                          onChange={() => setFormShareScope('custom')}
-                        />
-                        <span>특정 친구 지정</span>
-                      </label>
+                      {formShareScope !== 'private' && (
+                        <div className="settings-form-row">
+                          <span className="settings-label">공유 대상</span>
+                          <div className="solar-lunar-btn-group" style={{ marginTop: '6px' }}>
+                            <button
+                              type="button"
+                              className={`solar-lunar-btn ${formShareScope === 'public' ? 'active' : ''}`}
+                              onClick={() => {
+                                setFormShareScope('public');
+                                setFormSharedWithIds(sharedUsers.map(user => user.id));
+                              }}
+                            >
+                              모든 친구
+                            </button>
+                            <button
+                              type="button"
+                              className={`solar-lunar-btn ${formShareScope === 'custom' ? 'active' : ''}`}
+                              onClick={() => setFormShareScope('custom')}
+                            >
+                              특정 친구
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Checkbox list of friends if custom is selected */}
                       {formShareScope === 'custom' && (
@@ -2278,7 +2519,7 @@ export default function App() {
                         </div>
                       )}
 
-                      <div style={{ borderTop: '1px dashed #cbd5e1', marginTop: '6px', paddingTop: '8px' }}>
+                      {formShareScope !== 'private' && <div style={{ borderTop: '1px dashed #cbd5e1', marginTop: '6px', paddingTop: '8px' }}>
                         <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--text-muted)', marginBottom: '4px' }}>
                           새로운 공유인 추가 (해당 일정 공유)
                         </div>
@@ -2318,8 +2559,107 @@ export default function App() {
                             추가
                           </button>
                         </div>
-                      </div>
+                      </div>}
                     </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* Form Content: Birthday */}
+              {formType === 'birthday' && (
+                <>
+                  <div className="settings-form-row">
+                    <span className="settings-label">이름</span>
+                    <input
+                      type="text"
+                      className="input-text"
+                      placeholder="예: 민지, 부모님"
+                      value={formBdayName}
+                      onChange={(e) => setFormBdayName(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="settings-form-row">
+                    <span className="settings-label">생일 날짜</span>
+                    <input
+                      type="date"
+                      className="input-text"
+                      value={formTripStart}
+                      onChange={(e) => setFormTripStart(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="settings-form-row">
+                    <span className="settings-label">달력 기준</span>
+                    <div className="solar-lunar-btn-group" style={{ marginTop: '6px' }}>
+                      <button
+                        type="button"
+                        className={`solar-lunar-btn ${!formBdayIsLunar ? 'active' : ''}`}
+                        onClick={() => setFormBdayIsLunar(false)}
+                      >
+                        양력
+                      </button>
+                      <button
+                        type="button"
+                        className={`solar-lunar-btn ${formBdayIsLunar ? 'active' : ''}`}
+                        onClick={() => setFormBdayIsLunar(true)}
+                      >
+                        음력
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="settings-form-row">
+                    <span className="settings-label">표시 기간</span>
+                    <div className="solar-lunar-btn-group" style={{ marginTop: '6px' }}>
+                      <button
+                        type="button"
+                        className={`solar-lunar-btn ${!formBdayRepeatYearly ? 'active' : ''}`}
+                        onClick={() => setFormBdayRepeatYearly(false)}
+                      >
+                        올해만 표시
+                      </button>
+                      <button
+                        type="button"
+                        className={`solar-lunar-btn ${formBdayRepeatYearly ? 'active' : ''}`}
+                        onClick={() => setFormBdayRepeatYearly(true)}
+                      >
+                        매년 반복
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div className="toggle-switch-row">
+                      <span className="settings-label">생일 알림</span>
+                      <label className="switch">
+                        <input
+                          type="checkbox"
+                          checked={formEventAlarmEnabled}
+                          onChange={(e) => setFormEventAlarmEnabled(e.target.checked)}
+                        />
+                        <span className="slider"></span>
+                      </label>
+                    </div>
+
+                    {formEventAlarmEnabled && (
+                      <div className="settings-form-row fade-in">
+                        <span className="settings-label">알림 날짜와 시간</span>
+                        <input
+                          type="datetime-local"
+                          className="input-text"
+                          value={formEventAlarmDateTime}
+                          onChange={(e) => setFormEventAlarmDateTime(e.target.value)}
+                          required
+                        />
+                        <span style={{ marginTop: '4px', fontSize: '10.5px', color: 'var(--text-muted)' }}>
+                          원하는 생일 알림 날짜와 시간을 직접 선택하세요.
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </>
               )}
@@ -2327,7 +2667,7 @@ export default function App() {
               </fieldset>
 
               <div className="dialog-footer">
-                {isReadOnlyPerspective ? (
+                {isEventFormReadOnly ? (
                   <button 
                     type="button" 
                     onClick={() => setShowAddModal(false)} 

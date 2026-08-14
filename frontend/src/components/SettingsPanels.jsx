@@ -37,6 +37,7 @@ export default function SettingsPanels({
   onlyScheduleSettings = false,
   onlyAlarmSettings = false,
   onlyBirthdaySettings = false,
+  hidePanelTitles = false,
   relationGroups = ['친구', '연인', '가족'],
   setRelationGroups,
   calendarPerspective,
@@ -187,10 +188,10 @@ export default function SettingsPanels({
       {/* 1. 스케줄 설정 */}
       {showSchedule && (
       <div className="settings-panel-card" id="card-schedule">
-        <h3 className="panel-title">
+        {!hidePanelTitles && <h3 className="panel-title">
           <Clock size={16} color="var(--primary)" />
           <span>근무 유형 설정</span>
-        </h3>
+        </h3>}
         
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {/* Shift Inputs loop */}
@@ -311,10 +312,10 @@ export default function SettingsPanels({
           <button 
             type="button"
             onClick={handleAddLocalShift}
-            className="btn-secondary"
-            style={{ padding: '6px', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', border: '1px dashed var(--border-color)', marginTop: '4px' }}
+            className="shift-add-btn"
           >
-            + 근무 추가
+            <Plus size={14} />
+            근무 유형 추가
           </button>
 
           <button onClick={handleShiftSave} className="btn-save" style={{ marginTop: '8px' }}>
@@ -329,10 +330,10 @@ export default function SettingsPanels({
       {/* 2. 알림 설정 */}
       {showAlarm && (
       <div className="settings-panel-card" id="card-alarm">
-        <h3 className="panel-title">
+        {!hidePanelTitles && <h3 className="panel-title">
           <Bell size={16} color="var(--primary)" />
           <span>알림 설정</span>
-        </h3>
+        </h3>}
         
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <div className="toggle-switch-row">
@@ -683,10 +684,10 @@ export default function SettingsPanels({
       {/* 6. 생일 설정 */}
       {showBirthday && (
       <div className="settings-panel-card" id="card-birthday">
-        <h3 className="panel-title">
+        {!hidePanelTitles && <h3 className="panel-title">
           <Cake size={16} color="#db2777" />
           <span>생일 설정</span>
-        </h3>
+        </h3>}
         
         <form onSubmit={handleAddBirthday} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div className="settings-form-row">

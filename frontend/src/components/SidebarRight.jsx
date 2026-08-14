@@ -15,6 +15,7 @@ export default function SidebarRight({
   calendarPerspective,
   sharedUsers,
   isReadOnlyPerspective,
+  canEditEvent,
   settings,
   memos = [],
   setMemos,
@@ -81,6 +82,7 @@ export default function SidebarRight({
   };
   
   const getBirthdaySolarDateForYear = (evt, targetYear) => {
+    if (evt.repeatYearly === false && Number(evt.date?.slice(0, 4)) !== targetYear) return null;
     if (evt.isLunar) {
       let bdayLunar = getLunarDate(evt.date);
       if (!bdayLunar) {
@@ -236,7 +238,7 @@ export default function SidebarRight({
                           근무
                         </span>
                       </span>
-                      {!isReadOnlyPerspective && (
+                      {(canEditEvent ? canEditEvent(evt) : !isReadOnlyPerspective) && (
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button onClick={() => onEditEvent(evt)} className="nav-btn" style={{ padding: '2px', color: shiftData.color }}>
                             <Edit3 size={14} />
@@ -352,7 +354,7 @@ export default function SidebarRight({
                         )}
                         {title}
                       </span>
-                       {!isReadOnlyPerspective && (
+                       {(canEditEvent ? canEditEvent(evt) : !isReadOnlyPerspective) && (
                         <div style={{ display: 'flex', gap: '8px' }}>
                           {!isPrivate && (
                             <button onClick={() => onEditEvent(evt)} className="nav-btn" style={{ padding: '2px', color: isBoxMode ? textCol : 'inherit' }}>
@@ -845,7 +847,7 @@ export default function SidebarRight({
           style={{ marginTop: 'auto' }}
         >
           <Plus size={16} />
-          <span>+ 일정 추가</span>
+          <span>일정 추가</span>
         </button>
       )}
       {/* Participant Detail Modal */}

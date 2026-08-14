@@ -43,7 +43,12 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     is_lunar TINYINT(1) DEFAULT 0,
     alarm_on_day TINYINT(1) DEFAULT 0,
     alarm_week_before TINYINT(1) DEFAULT 0,
+    repeat_yearly TINYINT(1) DEFAULT 1,
+    alarm_enabled TINYINT(1) DEFAULT 1,
+    alarm_time VARCHAR(30),
+    alarm_date_time VARCHAR(30),
     share_scope VARCHAR(20) DEFAULT 'public',
+    share_permission VARCHAR(20) DEFAULT 'view',
     display_mode VARCHAR(20) DEFAULT 'dot',
     shared_with TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
