@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import jakarta.transaction.Transactional;
 
 @RestController
 @RequestMapping("/api/events")
@@ -16,9 +17,9 @@ public class EventController {
     private CalendarEventRepository repository;
 
     @GetMapping
-    public List<CalendarEvent> getEvents() {
-        List<CalendarEvent> events = repository.findAll();
-        if (events.isEmpty()) {
+    public List<CalendarEvent> getEvents(@RequestParam(required = false) String userId) {
+        List<CalendarEvent> events = userId == null || userId.isBlank() ? repository.findAll() : repository.findByOwnerUserId(userId);
+        if (events.isEmpty() && (userId == null || userId.isBlank())) {
             // Seed initial mock events to match initial React state
             List<CalendarEvent> seed = new ArrayList<>();
             
@@ -58,13 +59,19 @@ public class EventController {
     }
 
     @PostMapping
-    public List<CalendarEvent> saveEvents(@RequestBody List<CalendarEvent> events) {
-        repository.deleteAll();
+    @Transactional
+    public List<CalendarEvent> saveEvents(@RequestBody List<CalendarEvent> events, @RequestParam(required = false) String userId) {
+        if (userId == null || userId.isBlank()) repository.deleteAll();
+        else {
+            repository.deleteByOwnerUserId(userId);
+            events.forEach(event -> event.setOwnerUserId(userId));
+        }
         return repository.saveAll(events);
     }
 
     @PostMapping("/single")
-    public CalendarEvent saveSingleEvent(@RequestBody CalendarEvent event) {
+    public CalendarEvent saveSingleEvent(@RequestBody CalendarEvent event, @RequestParam(required = false) String userId) {
+        if (userId != null && !userId.isBlank()) event.setOwnerUserId(userId);
         return repository.save(event);
     }
 

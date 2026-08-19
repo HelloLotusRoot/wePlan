@@ -5,6 +5,7 @@ import {
   UserPlus, 
   Search, 
   Eye, 
+  Edit,
   Trash2, 
   Calendar, 
   Sparkles, 
@@ -20,8 +21,29 @@ import {
   Sliders,
   ChevronRight,
   MoreHorizontal,
-  ExternalLink
+  ExternalLink,
+  Star,
+  BookOpen,
+  Coffee
 } from 'lucide-react';
+
+const GROUP_ICON_OPTIONS = [
+  { key: 'users', label: '친구', Icon: Users },
+  { key: 'heart', label: '연인', Icon: Heart },
+  { key: 'home', label: '가족', Icon: Home },
+  { key: 'briefcase', label: '직장', Icon: Briefcase },
+  { key: 'book', label: '모임', Icon: BookOpen },
+  { key: 'coffee', label: '친목', Icon: Coffee },
+  { key: 'star', label: '기타', Icon: Star }
+];
+
+const getDefaultGroupIconKey = (groupName) => {
+  const clean = String(groupName || '').replace(/[^\w\s가-힣ㄱ-ㅎㅏ-ㅣ]/g, '').trim();
+  if (clean === '연인') return 'heart';
+  if (clean === '가족') return 'home';
+  if (clean === '동료' || clean === '직장') return 'briefcase';
+  return 'users';
+};
 
 export default function FriendsBoard({
   sharedUsers,
@@ -64,6 +86,19 @@ export default function FriendsBoard({
 
   // Add group form state
   const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupIcon, setNewGroupIcon] = useState('users');
+  const [editingGroup, setEditingGroup] = useState(null);
+  const [groupIcons, setGroupIcons] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('weplan_relation_group_icons') || '{}');
+    } catch {
+      return {};
+    }
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem('weplan_relation_group_icons', JSON.stringify(groupIcons));
+  }, [groupIcons]);
 
   // Filtered friends
   const filteredUsers = (sharedUsers || []).filter(user => {
@@ -124,12 +159,46 @@ export default function FriendsBoard({
     e.preventDefault();
     const trimmed = newGroupName.trim();
     if (!trimmed) return;
-    if (relationGroups.includes(trimmed)) {
+    if (relationGroups.some(group => group === trimmed && group !== editingGroup)) {
       alert('이미 존재하는 그룹 이름입니다.');
       return;
     }
-    setRelationGroups([...relationGroups, trimmed]);
+
+    if (editingGroup) {
+      setRelationGroups(relationGroups.map(group => group === editingGroup ? trimmed : group));
+      setSharedUsers(prev => prev.map(user => user.relation === editingGroup ? { ...user, relation: trimmed } : user));
+      setGroupIcons(prev => {
+        const next = { ...prev };
+        delete next[editingGroup];
+        next[trimmed] = newGroupIcon;
+        return next;
+      });
+      if (selectedGroup === editingGroup) setSelectedGroup(trimmed);
+      if (relation === editingGroup) setRelation(trimmed);
+    } else {
+      setRelationGroups([...relationGroups, trimmed]);
+      setGroupIcons(prev => ({ ...prev, [trimmed]: newGroupIcon }));
+    }
+
     setNewGroupName('');
+    setNewGroupIcon('users');
+    setEditingGroup(null);
+  };
+
+  const handleEditGroup = (groupName) => {
+    setEditingGroup(groupName);
+    setNewGroupName(groupName);
+    setNewGroupIcon(groupIcons[groupName] || getDefaultGroupIconKey(groupName));
+  };
+
+  const handleCancelGroupEdit = () => {
+    setEditingGroup(null);
+    setNewGroupName('');
+    setNewGroupIcon('users');
+  };
+
+  const handleCloseGroupModal = () => {
+    handleCancelGroupEdit();
     setShowGroupModal(false);
   };
 
@@ -140,16 +209,24 @@ export default function FriendsBoard({
     }
     if (window.confirm(`"${groupName}" 그룹을 삭제하시겠습니까?`)) {
       setRelationGroups(relationGroups.filter(g => g !== groupName));
+      setGroupIcons(prev => {
+        const next = { ...prev };
+        delete next[groupName];
+        return next;
+      });
       if (selectedGroup === groupName) setSelectedGroup('all');
+      if (editingGroup === groupName) handleCancelGroupEdit();
     }
   };
 
   const getRelationTheme = (rel) => {
     const clean = rel.replace(/[^\w\s가-힣ㄱ-ㅎㅏ-ㅣ]/g, '').trim();
-    if (clean === '연인') return { bg: '#fff1f2', color: '#e11d48', border: '#fecdd3', accent: '#f43f5e', icon: Heart };
-    if (clean === '가족') return { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe', accent: '#3b82f6', icon: Home };
-    if (clean === '동료' || clean === '직장') return { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', accent: '#10b981', icon: Briefcase };
-    return { bg: '#f5f3ff', color: '#7c3aed', border: '#ddd6fe', accent: '#8b5cf6', icon: Users };
+    const iconKey = groupIcons[rel] || groupIcons[clean] || getDefaultGroupIconKey(clean);
+    const icon = GROUP_ICON_OPTIONS.find(option => option.key === iconKey)?.Icon || Users;
+    if (clean === '연인') return { bg: '#fff1f2', color: '#e11d48', border: '#fecdd3', accent: '#f43f5e', icon };
+    if (clean === '가족') return { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe', accent: '#3b82f6', icon };
+    if (clean === '동료' || clean === '직장') return { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', accent: '#10b981', icon };
+    return { bg: '#f5f3ff', color: '#7c3aed', border: '#ddd6fe', accent: '#8b5cf6', icon };
   };
 
   const getSharedEventsCount = (userId) => {
@@ -315,6 +392,7 @@ export default function FriendsBoard({
           {relationGroups.map(group => {
             const count = (sharedUsers || []).filter(u => u.relation.replace(/[^\w\s가-힣ㄱ-ㅎㅏ-ㅣ]/g, '').trim() === group).length;
             const isSelected = selectedGroup === group;
+            const GroupIcon = getRelationTheme(group).icon;
             return (
               <button
                 key={group}
@@ -328,9 +406,13 @@ export default function FriendsBoard({
                   fontSize: '13px',
                   fontWeight: '700',
                   cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
                   transition: 'all 0.15s ease'
                 }}
               >
+                <GroupIcon size={13} />
                 {group} ({count})
               </button>
             );
@@ -764,78 +846,138 @@ export default function FriendsBoard({
                 관계 그룹 관리
               </h3>
               <button
-                onClick={() => setShowGroupModal(false)}
+                onClick={handleCloseGroupModal}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: '18px' }}
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleAddGroupSubmit} style={{ display: 'flex', gap: '8px' }}>
-              <input
-                type="text"
-                placeholder="새 그룹 이름 (예: 동창, 스터디)"
-                value={newGroupName}
-                onChange={(e) => setNewGroupName(e.target.value)}
-                style={{
-                  flex: 1,
-                  padding: '10px 12px',
-                  borderRadius: '10px',
-                  border: '1px solid var(--border-color)',
-                  fontSize: '14px',
-                  outline: 'none'
-                }}
-              />
-              <button
-                type="submit"
-                style={{
-                  padding: '10px 16px',
-                  borderRadius: '10px',
-                  border: 'none',
-                  backgroundColor: '#4f46e5',
-                  color: '#ffffff',
-                  fontWeight: '700',
-                  cursor: 'pointer'
-                }}
-              >
-                추가
-              </button>
+            <form onSubmit={handleAddGroupSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text-muted)' }}>
+                {editingGroup ? '그룹 수정' : '새 그룹 추가'}
+              </div>
+              <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap' }}>
+                {GROUP_ICON_OPTIONS.map(({ key, label, Icon }) => {
+                  const isSelected = newGroupIcon === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setNewGroupIcon(key)}
+                      title={label}
+                      aria-label={`${label} 아이콘 선택`}
+                      style={{
+                        width: '38px',
+                        height: '38px',
+                        borderRadius: '10px',
+                        border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border-color)',
+                        backgroundColor: isSelected ? 'var(--primary-light)' : '#ffffff',
+                        color: isSelected ? 'var(--primary)' : 'var(--text-muted)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Icon size={17} />
+                    </button>
+                  );
+                })}
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input
+                  type="text"
+                  placeholder="그룹 이름 (예: 동창, 스터디)"
+                  value={newGroupName}
+                  onChange={(e) => setNewGroupName(e.target.value)}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    padding: '10px 12px',
+                    borderRadius: '10px',
+                    border: '1px solid var(--border-color)',
+                    fontSize: '14px',
+                    outline: 'none'
+                  }}
+                />
+                {editingGroup && (
+                  <button
+                    type="button"
+                    onClick={handleCancelGroupEdit}
+                    style={{ padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--border-color)', backgroundColor: '#ffffff', color: 'var(--text-muted)', fontWeight: '700', cursor: 'pointer' }}
+                  >
+                    취소
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  style={{
+                    padding: '10px 16px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    backgroundColor: '#4f46e5',
+                    color: '#ffffff',
+                    fontWeight: '700',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {editingGroup ? '저장' : '추가'}
+                </button>
+              </div>
             </form>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '240px', overflowY: 'auto' }}>
-              {relationGroups.map(g => (
-                <div
-                  key={g}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '10px 14px',
-                    borderRadius: '10px',
-                    backgroundColor: '#f8fafc',
-                    border: '1px solid var(--border-color)'
-                  }}
-                >
-                  <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-main)' }}>{g}</span>
-                  <button
-                    onClick={() => handleDeleteGroup(g)}
+              {relationGroups.map(g => {
+                const GroupIcon = getRelationTheme(g).icon;
+                return (
+                  <div
+                    key={g}
                     style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#ef4444',
-                      cursor: 'pointer',
-                      padding: '4px'
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      backgroundColor: editingGroup === g ? 'var(--primary-light)' : '#f8fafc',
+                      border: editingGroup === g ? '1px solid var(--primary)' : '1px solid var(--border-color)'
                     }}
-                    title="그룹 삭제"
                   >
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              ))}
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontWeight: '600', fontSize: '14px', color: 'var(--text-main)' }}>
+                      <GroupIcon size={16} color="var(--primary)" />
+                      {g}
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleEditGroup(g)}
+                        style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', padding: '4px' }}
+                        title="그룹 수정"
+                      >
+                        <Edit size={15} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteGroup(g)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: '#ef4444',
+                          cursor: 'pointer',
+                          padding: '4px'
+                        }}
+                        title="그룹 삭제"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <button
-              onClick={() => setShowGroupModal(false)}
+              onClick={handleCloseGroupModal}
               style={{
                 width: '100%',
                 padding: '12px',

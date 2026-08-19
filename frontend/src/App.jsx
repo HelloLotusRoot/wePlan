@@ -651,6 +651,11 @@ export default function App() {
   }, [dataLoaded, events]);
 
   useEffect(() => {
+    if (!dataLoaded || !user?.id) return;
+    api.getEvents([]).then(userEvents => setEvents(shiftMockDatesToCurrentMonth(userEvents || [])));
+  }, [dataLoaded, user?.id]);
+
+  useEffect(() => {
     localStorage.setItem('weplan_shared_users', JSON.stringify(sharedUsers));
     if (!dataLoaded) return;
     api.saveSharedUsers(sharedUsers);
@@ -1339,6 +1344,7 @@ export default function App() {
             setEvents={setEvents}
             shifts={shifts}
             holidaysMap={holidaysMap}
+            currentUser={user}
           />
         ) : currentTab === 'stats' ? (
           <StatsDashboard 
@@ -1712,24 +1718,20 @@ export default function App() {
             </div>
 
             {(() => {
-              const today = new Date();
-              const endDate = new Date(today);
-              endDate.setDate(today.getDate() + 7);
+              const now = new Date();
               const toDateString = (date) => {
                 const year = date.getFullYear();
                 const month = String(date.getMonth() + 1).padStart(2, '0');
                 const day = String(date.getDate()).padStart(2, '0');
                 return `${year}-${month}-${day}`;
               };
-              const todayStr = toDateString(today);
-              const endDateStr = toDateString(endDate);
               const upcoming = events
                 .map((event) => {
                   if (event.type === 'birthday') {
-                    const birthdayAlarmEnabled = event.alarmEnabled ?? (event.alarmOnDay !== false || Boolean(event.alarmWeekBefore));
+                    const birthdayAlarmEnabled = event.alarmEnabled === true;
                     if (!birthdayAlarmEnabled) return { ...event, notificationDate: null };
 
-                    const candidateYears = [...new Set([today.getFullYear(), endDate.getFullYear()])];
+                    const candidateYears = [now.getFullYear(), now.getFullYear() + 1];
                     const registeredYear = Number(event.date?.slice(0, 4));
                     const registeredBirthday = getBirthdayDateForYear(event, registeredYear) || event.date;
                     const registeredAlarm = event.alarmDateTime ? new Date(event.alarmDateTime) : null;
@@ -1744,18 +1746,19 @@ export default function App() {
                         if (!birthdayDate) return null;
                         return new Date(new Date(`${birthdayDate}T00:00:00`).getTime() - alarmOffset);
                       })
-                      .find((date) => date && toDateString(date) >= todayStr && toDateString(date) <= endDateStr);
+                      .find((date) => date && date.getTime() >= now.getTime());
 
                     return {
                       ...event,
                       notificationDate: birthdayAlarm ? toDateString(birthdayAlarm) : null,
+                      notificationTimestamp: birthdayAlarm?.getTime(),
                       alarmDisplay: birthdayAlarm
                         ? birthdayAlarm.toLocaleString('ko-KR', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
                         : undefined
                     };
                   }
 
-                  const alarmEnabled = event.alarmEnabled ?? (alarmSettings.enableEventAlarm !== false);
+                  const alarmEnabled = event.alarmEnabled === true;
                   if (!alarmEnabled) return { ...event, notificationDate: null };
 
                   const eventDate = event.date || event.startDate;
@@ -1767,6 +1770,7 @@ export default function App() {
                       return {
                         ...event,
                         notificationDate: toDateString(customAlarmDate),
+                        notificationTimestamp: customAlarmDate.getTime(),
                         alarmDisplay: customAlarmDate.toLocaleString('ko-KR', {
                           month: 'long',
                           day: 'numeric',
@@ -1800,24 +1804,21 @@ export default function App() {
                     alarmDate.setDate(alarmDate.getDate() - 7);
                   }
 
-                  return { ...event, alarmTime, notificationDate: toDateString(alarmDate) };
+                  return {
+                    ...event,
+                    alarmTime,
+                    notificationDate: toDateString(alarmDate),
+                    notificationTimestamp: alarmDate.getTime()
+                  };
                 })
-                .filter((event) => event.notificationDate && event.notificationDate >= todayStr && event.notificationDate <= endDateStr)
-                .sort((a, b) => a.notificationDate.localeCompare(b.notificationDate))
+                .filter((event) => Number.isFinite(event.notificationTimestamp) && event.notificationTimestamp >= now.getTime())
+                .sort((a, b) => a.notificationTimestamp - b.notificationTimestamp)
                 .slice(0, 10);
-
-              if (!alarmSettings.enableEventAlarm) {
-                return (
-                  <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
-                    일정 알림이 꺼져 있습니다.<br />아래 버튼을 눌러 설정에서 켜 주세요.
-                  </div>
-                );
-              }
 
               if (upcoming.length === 0) {
                 return (
                   <div style={{ padding: '28px 16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
-                    앞으로 7일 동안 예정된 알림이 없습니다.
+                    예정된 알림이 없습니다.<br />일정이나 생일에서 알림을 설정해 보세요.
                   </div>
                 );
               }

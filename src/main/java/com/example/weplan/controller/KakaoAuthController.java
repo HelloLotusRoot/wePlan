@@ -1,5 +1,8 @@
 package com.example.weplan.controller;
 
+import com.example.weplan.model.RegisteredUser;
+import com.example.weplan.repository.RegisteredUserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.util.LinkedMultiValueMap;
@@ -15,6 +18,9 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/auth")
 public class KakaoAuthController {
+
+    @Autowired
+    private RegisteredUserRepository registeredUserRepository;
 
     @Value("${kakao.rest-api-key}")
     private String kakaoRestApiKey;
@@ -148,6 +154,12 @@ public class KakaoAuthController {
             result.put("id", kakaoId);
             result.put("nickname", nickname);
             result.put("profileImage", profileImage);
+
+            registeredUserRepository.save(RegisteredUser.builder()
+                    .id(kakaoId)
+                    .nickname(nickname == null || nickname.isBlank() ? kakaoId : nickname)
+                    .profileImage(profileImage)
+                    .build());
 
             return ResponseEntity.ok(result);
         } catch (Exception e) {

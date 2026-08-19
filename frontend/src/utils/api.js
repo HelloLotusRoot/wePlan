@@ -1,5 +1,19 @@
 const BASE_URL = 'http://localhost:8080/api';
 
+function getCurrentUserId() {
+  try {
+    return JSON.parse(localStorage.getItem('weplan_user') || 'null')?.id || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function withCurrentUser(path) {
+  const userId = getCurrentUserId();
+  if (!userId) return path;
+  return `${path}${path.includes('?') ? '&' : '?'}userId=${encodeURIComponent(userId)}`;
+}
+
 async function request(path, options = {}) {
   const url = `${BASE_URL}${path}`;
   if (!options.headers) {
@@ -65,7 +79,7 @@ export const api = {
 
   async getEvents(localFallback) {
     try {
-      const data = await request('/events');
+      const data = await request(withCurrentUser('/events'));
       return data;
     } catch (e) {
       return localFallback;
@@ -73,14 +87,14 @@ export const api = {
   },
   async saveEvents(events) {
     try {
-      return await request('/events', { method: 'POST', body: JSON.stringify(events) });
+      return await request(withCurrentUser('/events'), { method: 'POST', body: JSON.stringify(events) });
     } catch (e) {
       console.warn("Failed to sync all events to backend.");
     }
   },
   async saveSingleEvent(event) {
     try {
-      return await request('/events/single', { method: 'POST', body: JSON.stringify(event) });
+      return await request(withCurrentUser('/events/single'), { method: 'POST', body: JSON.stringify(event) });
     } catch (e) {
       console.warn("Failed to save event to backend.");
     }
@@ -171,5 +185,27 @@ export const api = {
 
   async loginWithKakao(code, redirectUri) {
     return await request(`/auth/kakao?code=${encodeURIComponent(code)}&redirectUri=${encodeURIComponent(redirectUri)}`);
+  },
+
+  async searchRegisteredUsers(query) {
+    return await request(`/schedule-sync/users?query=${encodeURIComponent(query)}`);
+  },
+  async registerCurrentUser(user) {
+    return await request('/schedule-sync/users/register', { method: 'POST', body: JSON.stringify(user) });
+  },
+  async createScheduleSyncRequest(payload) {
+    return await request('/schedule-sync/requests', { method: 'POST', body: JSON.stringify(payload) });
+  },
+  async getIncomingScheduleSyncRequests(userId) {
+    return await request(`/schedule-sync/requests/incoming?userId=${encodeURIComponent(userId)}`);
+  },
+  async getOutgoingScheduleSyncRequests(userId) {
+    return await request(`/schedule-sync/requests/outgoing?userId=${encodeURIComponent(userId)}`);
+  },
+  async respondScheduleSyncRequest(requestId, userId, status) {
+    return await request(`/schedule-sync/requests/${encodeURIComponent(requestId)}?userId=${encodeURIComponent(userId)}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+  },
+  async publishManagerSchedules(managerUserId, monthKey, events) {
+    return await request(`/schedule-sync/publish?managerUserId=${encodeURIComponent(managerUserId)}&monthKey=${encodeURIComponent(monthKey)}`, { method: 'POST', body: JSON.stringify(events) });
   }
 };

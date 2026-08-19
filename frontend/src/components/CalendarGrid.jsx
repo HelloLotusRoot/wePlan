@@ -71,14 +71,6 @@ export default function CalendarGrid({
     });
   }, [events, searchTerm]);
 
-  const getShareIcon = (evt) => {
-    if (calendarPerspective !== 'me') return '';
-    const scope = evt.shareScope || (evt.isPrivate ? 'private' : 'public');
-    if (scope === 'private') return '🔒 ';
-    if (scope === 'custom') return '';
-    return '';
-  };
-
   const renderSharedAvatars = (evt) => {
     if (evt.shareScope !== 'custom' || !evt.sharedWith || evt.sharedWith.length === 0) return null;
     const sharedFriends = (sharedUsers || []).filter(u => evt.sharedWith.includes(u.id));
@@ -1132,7 +1124,7 @@ export default function CalendarGrid({
                                       ></span>
                                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px', width: '100%' }}>
                                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                          {getShareIcon(evt)}{displayTitle}
+                                          {displayTitle}
                                         </span>
                                         {renderSharedAvatars(evt)}
                                       </span>
@@ -1164,7 +1156,7 @@ export default function CalendarGrid({
                                       {evt.time && <span style={{ opacity: 0.8, fontSize: '8px', marginRight: '3px', flexShrink: 0 }}>{evt.time}</span>}
                                       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px', width: '100%' }}>
                                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                          {getShareIcon(evt)}{displayTitle}
+                                          {displayTitle}
                                         </span>
                                         {renderSharedAvatars(evt)}
                                       </span>
@@ -1308,7 +1300,7 @@ export default function CalendarGrid({
                       {(isActualStart || startColIdx === 0) && (
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px', width: '100%' }}>
                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {isPrivate ? '일정 있음' : `${getShareIcon(evt)}${evt.title}`}
+                            {isPrivate ? '일정 있음' : evt.title}
                           </span>
                           {!isPrivate && renderSharedAvatars(evt)}
                         </span>

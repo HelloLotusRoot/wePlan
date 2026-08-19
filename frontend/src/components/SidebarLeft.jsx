@@ -9,7 +9,6 @@ import {
   BarChart3, 
   Settings, 
   UserPlus,
-  UserCheck,
   Edit,
   Camera,
   LogOut,
@@ -91,7 +90,7 @@ export default function SidebarLeft({
 
   const menuItems = [
     { id: 'calendar', label: '캘린더', icon: CalendarIcon },
-    { id: 'friends', label: '친구 목록', icon: UserCheck },
+    { id: 'friends', label: '친구 목록', icon: Users },
     { id: 'records', label: '기록', icon: FileText },
     { id: 'stats', label: '통계', icon: BarChart3 },
     { id: 'schedule', label: '근무 배정', icon: Clock },

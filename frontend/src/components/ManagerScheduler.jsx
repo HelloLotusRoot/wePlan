@@ -14,16 +14,20 @@ import {
   ToggleLeft,
   Calendar,
   AlertCircle,
-  Settings, Paintbrush
+  Settings, Paintbrush, PenLine, Star, LockKeyhole, Eraser, UserRoundCog,
+  CalendarRange, StickyNote, Moon, CalendarOff, Handshake, TriangleAlert,
+  CircleCheckBig, ClipboardList, ShieldCheck, UserX, Ban, Link2, Search, Check, X
 } from 'lucide-react';
 import { getHoliday } from '../utils/holidays';
+import { api } from '../utils/api';
 
 export default function ManagerScheduler({ 
   currentDate, 
   events = [], 
   setEvents,
   shifts = [],
-  holidaysMap = {}
+  holidaysMap = {},
+  currentUser = null
 }) {
   // 1. Core States
   const [selectedYear, setSelectedYear] = useState(() => currentDate ? currentDate.getFullYear() : new Date().getFullYear());
@@ -31,6 +35,14 @@ export default function ManagerScheduler({
   const [selectedBrush, setSelectedBrush] = useState(null);
   const [showStaffManagerModal, setShowStaffManagerModal] = useState(false);
   const [showBrushManagerModal, setShowBrushManagerModal] = useState(false); // The shift type selected to "paint" onto cells
+  const [manualTool, setManualTool] = useState('assign'); // assign | preferred | fixed | clear
+  const [manualRequests, setManualRequests] = useState(() => {
+    const saved = localStorage.getItem('weplan_manager_manual_requests');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return {};
+  });
 
   // 2. Staff State with Qualitative constraints (avoidWith, specialNote, specialRequests)
   const [staffList, setStaffList] = useState(() => {
@@ -45,6 +57,15 @@ export default function ManagerScheduler({
             team: s.team || '',
             avoidWith: s.avoidWith || [],
             specialNote: s.specialNote || '',
+            allowedShiftIds: Array.isArray(s.allowedShiftIds) ? s.allowedShiftIds : [],
+            minNightShifts: Number.isFinite(s.minNightShifts) ? s.minNightShifts : 0,
+            maxNightShifts: Number.isFinite(s.maxNightShifts) ? s.maxNightShifts : 6,
+            targetWorkDays: Number.isFinite(s.targetWorkDays) ? s.targetWorkDays : 0,
+            employmentStartDate: s.employmentStartDate || '',
+            employmentEndDate: s.employmentEndDate || '',
+            linkedUserId: s.linkedUserId || '',
+            linkedUserNickname: s.linkedUserNickname || '',
+            syncStatus: s.syncStatus || '',
             specialRequests: s.specialRequests || { nightAvoid: false, weekendOff: false, couplingWith: '' }
           }));
         }
@@ -221,7 +242,12 @@ export default function ManagerScheduler({
     }
     return [
       { id: 'senior', label: '경력직 (Senior)', type: 'senior' },
-      { id: 'junior', label: '신규/신입 (Junior)', type: 'junior' }
+      { id: 'junior', label: '신규/신입 (Junior)', type: 'junior' },
+      { id: 'L1', label: 'L1 입문', type: 'junior' },
+      { id: 'L2', label: 'L2 초급', type: 'junior' },
+      { id: 'L3', label: 'L3 중급', type: 'senior' },
+      { id: 'L4', label: 'L4 숙련', type: 'senior' },
+      { id: 'L5', label: 'L5 리더', type: 'senior' }
     ];
   });
 
@@ -375,7 +401,16 @@ export default function ManagerScheduler({
           maxWeeklyWorkHours: parsed.maxWeeklyWorkHours !== undefined ? parsed.maxWeeklyWorkHours : 52,
           protectJuniors: parsed.protectJuniors !== undefined ? parsed.protectJuniors : true,
           avoidConflict: parsed.avoidConflict !== undefined ? parsed.avoidConflict : true,
-          matchPreceptors: parsed.matchPreceptors !== undefined ? parsed.matchPreceptors : true
+          matchPreceptors: parsed.matchPreceptors !== undefined ? parsed.matchPreceptors : true,
+          maxConsecutiveOff: parsed.maxConsecutiveOff !== undefined ? parsed.maxConsecutiveOff : 4,
+          maxConsecutiveNight: parsed.maxConsecutiveNight !== undefined ? parsed.maxConsecutiveNight : 3,
+          forbiddenPatterns: Array.isArray(parsed.forbiddenPatterns) ? parsed.forbiddenPatterns : ['ND', 'NE', 'ED', 'NNNN'],
+          avoidPatterns: Array.isArray(parsed.avoidPatterns) ? parsed.avoidPatterns : [],
+          coverage: parsed.coverage || {
+            weekday: { D: 2, E: 1, N: 1 },
+            saturday: { D: 2, E: 1, N: 1 },
+            holiday: { D: 1, E: 1, N: 1 }
+          }
         };
       } catch (e) {}
     }
@@ -386,7 +421,16 @@ export default function ManagerScheduler({
       maxWeeklyWorkHours: 52,     // 최대 주간 근로시간
       protectJuniors: true,      // 신규 간호사 보호 (근무별 경력직 최소 1인 조화)
       avoidConflict: true,       // 갈등 조원 동시 배치 배제
-      matchPreceptors: true      // 프리셉터-프리셉티 동행 근무 연동
+      matchPreceptors: true,     // 프리셉터-프리셉티 동행 근무 연동
+      maxConsecutiveOff: 4,
+      maxConsecutiveNight: 3,
+      forbiddenPatterns: ['ND', 'NE', 'ED', 'NNNN'],
+      avoidPatterns: [],
+      coverage: {
+        weekday: { D: 2, E: 1, N: 1 },
+        saturday: { D: 2, E: 1, N: 1 },
+        holiday: { D: 1, E: 1, N: 1 }
+      }
     };
   });
 
@@ -399,6 +443,10 @@ export default function ManagerScheduler({
   // 5. Staff Config Modal (개인별 상세 설정)
   const [showStaffConfigModal, setShowStaffConfigModal] = useState(false);
   const [selectedStaffForConfig, setSelectedStaffForConfig] = useState(null);
+  const [accountSearchQuery, setAccountSearchQuery] = useState('');
+  const [accountSearchResults, setAccountSearchResults] = useState([]);
+  const [accountSearchLoading, setAccountSearchLoading] = useState(false);
+  const [incomingSyncRequests, setIncomingSyncRequests] = useState([]);
   const [personalConfigForm, setPersonalConfigForm] = useState({
     name: '',
     role: '',
@@ -408,7 +456,16 @@ export default function ManagerScheduler({
     avoidWith: [],
     nightAvoid: false,
     weekendOff: false,
-    couplingWith: ''
+    couplingWith: '',
+    allowedShiftIds: [],
+    minNightShifts: 0,
+    maxNightShifts: 6,
+    targetWorkDays: 0,
+    employmentStartDate: '',
+    employmentEndDate: '',
+    linkedUserId: '',
+    linkedUserNickname: '',
+    syncStatus: ''
   });
 
   // Open config panel for staff
@@ -423,9 +480,97 @@ export default function ManagerScheduler({
       avoidWith: staff.avoidWith || [],
       nightAvoid: staff.specialRequests?.nightAvoid || false,
       weekendOff: staff.specialRequests?.weekendOff || false,
-      couplingWith: staff.specialRequests?.couplingWith || ''
+      couplingWith: staff.specialRequests?.couplingWith || '',
+      allowedShiftIds: Array.isArray(staff.allowedShiftIds) ? staff.allowedShiftIds : [],
+      minNightShifts: staff.minNightShifts ?? 0,
+      maxNightShifts: staff.maxNightShifts ?? 6,
+      targetWorkDays: staff.targetWorkDays ?? 0,
+      employmentStartDate: staff.employmentStartDate || '',
+      employmentEndDate: staff.employmentEndDate || '',
+      linkedUserId: staff.linkedUserId || '',
+      linkedUserNickname: staff.linkedUserNickname || '',
+      syncStatus: staff.syncStatus || ''
     });
+    setAccountSearchQuery('');
+    setAccountSearchResults([]);
     setShowStaffConfigModal(true);
+  };
+
+  const refreshScheduleSyncRequests = async () => {
+    if (!currentUser?.id) return;
+    try {
+      await api.registerCurrentUser({ id: currentUser.id, nickname: currentUser.nickname || currentUser.id, profileImage: currentUser.profileImage || '' });
+      const [incoming, outgoing] = await Promise.all([
+        api.getIncomingScheduleSyncRequests(currentUser.id),
+        api.getOutgoingScheduleSyncRequests(currentUser.id)
+      ]);
+      setIncomingSyncRequests((incoming || []).filter(request => request.status === 'pending'));
+      const latestByStaff = {};
+      (outgoing || []).forEach(request => {
+        if (!latestByStaff[request.staffId]) latestByStaff[request.staffId] = request;
+      });
+      setStaffList(prev => prev.map(staff => latestByStaff[staff.id] ? {
+        ...staff,
+        linkedUserId: latestByStaff[staff.id].targetUserId,
+        syncStatus: latestByStaff[staff.id].status
+      } : staff));
+      const selectedRequest = latestByStaff[selectedStaffForConfig?.id];
+      if (selectedRequest) {
+        setPersonalConfigForm(prev => ({ ...prev, linkedUserId: selectedRequest.targetUserId, syncStatus: selectedRequest.status }));
+      }
+    } catch (error) {
+      console.warn('근무표 연동 요청을 불러오지 못했습니다.', error);
+    }
+  };
+
+  useEffect(() => {
+    refreshScheduleSyncRequests();
+  }, [currentUser?.id]);
+
+  const handleSearchRegisteredUsers = async () => {
+    const query = accountSearchQuery.trim();
+    if (!query) return;
+    setAccountSearchLoading(true);
+    try {
+      const results = await api.searchRegisteredUsers(query);
+      setAccountSearchResults((results || []).filter(user => user.id !== currentUser?.id));
+    } catch (error) {
+      alert('가입 계정 검색에 실패했습니다. 백엔드 연결 상태를 확인해 주세요.');
+    } finally {
+      setAccountSearchLoading(false);
+    }
+  };
+
+  const handleRequestAccountLink = async (targetUser) => {
+    if (!currentUser?.id || !selectedStaffForConfig) {
+      alert('로그인 후 연동 요청을 보낼 수 있습니다.');
+      return;
+    }
+    try {
+      await api.createScheduleSyncRequest({
+        managerUserId: currentUser.id,
+        managerName: currentUser.nickname || currentUser.id,
+        targetUserId: targetUser.id,
+        staffId: selectedStaffForConfig.id,
+        staffName: personalConfigForm.name || selectedStaffForConfig.name
+      });
+      setPersonalConfigForm(prev => ({ ...prev, linkedUserId: targetUser.id, linkedUserNickname: targetUser.nickname, syncStatus: 'pending' }));
+      setAccountSearchResults([]);
+      setAccountSearchQuery('');
+      alert(`${targetUser.nickname}님에게 근무표 연동 요청을 보냈습니다.`);
+    } catch (error) {
+      alert(error?.message || '연동 요청 전송에 실패했습니다.');
+    }
+  };
+
+  const handleRespondScheduleSync = async (request, status) => {
+    try {
+      await api.respondScheduleSyncRequest(request.id, currentUser.id, status);
+      setIncomingSyncRequests(prev => prev.filter(item => item.id !== request.id));
+      alert(status === 'accepted' ? `${request.managerName}님의 근무표 연동을 수락했습니다.` : '근무표 연동을 거절했습니다.');
+    } catch (error) {
+      alert('연동 요청 처리에 실패했습니다.');
+    }
   };
 
   // Save personal configs
@@ -442,12 +587,24 @@ export default function ManagerScheduler({
           team: personalConfigForm.team ? personalConfigForm.team.trim() : '',
           specialNote: personalConfigForm.specialNote.trim(),
           avoidWith: personalConfigForm.avoidWith,
+          allowedShiftIds: personalConfigForm.allowedShiftIds,
+          minNightShifts: Math.max(0, Number(personalConfigForm.minNightShifts) || 0),
+          maxNightShifts: Math.max(Number(personalConfigForm.minNightShifts) || 0, Number(personalConfigForm.maxNightShifts) || 0),
+          targetWorkDays: Math.max(0, Number(personalConfigForm.targetWorkDays) || 0),
+          employmentStartDate: personalConfigForm.employmentStartDate,
+          employmentEndDate: personalConfigForm.employmentEndDate,
+          linkedUserId: personalConfigForm.linkedUserId,
+          linkedUserNickname: personalConfigForm.linkedUserNickname,
+          syncStatus: personalConfigForm.syncStatus,
           specialRequests: {
             nightAvoid: personalConfigForm.nightAvoid,
             weekendOff: personalConfigForm.weekendOff,
             couplingWith: personalConfigForm.couplingWith
           }
         };
+      }
+      if (currentUser?.id && personalConfigForm.linkedUserId === currentUser.id && s.linkedUserId === currentUser.id) {
+        return { ...s, linkedUserId: '', linkedUserNickname: '', syncStatus: '' };
       }
       return s;
     }));
@@ -491,6 +648,26 @@ export default function ManagerScheduler({
   const currentMonthKey = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
   const isOffShift = (shiftId) => shiftId === 'O' || shiftId === 'OFF' || shiftId === 'Off';
   const priorityShiftIds = customShifts.filter(s => s.id !== 'O' && s.id !== 'OFF' && s.id !== 'Off').map(s => s.id);
+  const isNightShift = (shiftId) => ['N', 'NIGHT', 'CLOSE', '야간', '마감'].includes(String(shiftId || '').toUpperCase());
+  const getDateString = (day) => `${currentMonthKey}-${String(day).padStart(2, '0')}`;
+  const isStaffActiveOnDay = (staff, day) => {
+    const date = getDateString(day);
+    return (!staff.employmentStartDate || date >= staff.employmentStartDate)
+      && (!staff.employmentEndDate || date <= staff.employmentEndDate);
+  };
+  const getCoverageType = (day) => {
+    const date = getDateString(day);
+    const dow = new Date(selectedYear, selectedMonth - 1, day).getDay();
+    const holiday = holidaysMap?.[date] || getHoliday(date);
+    if (holiday || dow === 0) return 'holiday';
+    if (dow === 6) return 'saturday';
+    return 'weekday';
+  };
+  const getRequiredCount = (day, shiftId) => {
+    const configured = wardRules.coverage?.[getCoverageType(day)]?.[shiftId];
+    return Number.isFinite(Number(configured)) ? Math.max(0, Number(configured)) : null;
+  };
+  const getPatternCode = (shiftId) => isOffShift(shiftId) ? 'O' : String(shiftId || '').toUpperCase();
 
   // Roster Validator Engine
   const validateRoster = (rosterData) => {
@@ -499,6 +676,9 @@ export default function ManagerScheduler({
 
     staffList.forEach(staff => {
       let consecutiveWork = 0;
+      let consecutiveOff = 0;
+      let consecutiveNight = 0;
+      let nightCount = 0;
       const weeklyWorkCount = {}; // weekIndex -> count
       const weeklyWorkHours = {}; // weekIndex -> hours
       
@@ -510,6 +690,14 @@ export default function ManagerScheduler({
 
       for (let day = 1; day <= daysInMonth; day++) {
         const shiftId = monthRoster[staff.id]?.[day] || '';
+        const dateString = getDateString(day);
+
+        if (shiftId && !isStaffActiveOnDay(staff, day) && !isOffShift(shiftId)) {
+          warnings.push({ id: `warn-employment-${staff.id}-${day}`, staffName: staff.name, day, message: `${staff.name}: 근무 시작일/종료일 범위 밖(${dateString})에 근무가 배정됨` });
+        }
+        if (shiftId && !isOffShift(shiftId) && staff.allowedShiftIds?.length > 0 && !staff.allowedShiftIds.includes(shiftId)) {
+          warnings.push({ id: `warn-allowed-${staff.id}-${day}`, staffName: staff.name, day, message: `${staff.name}: 가능 근무 목록에 없는 ${shiftId} 근무가 배정됨` });
+        }
         
         if (shiftId) {
           const shift = currentShifts.find(s => s.id === shiftId);
@@ -522,7 +710,22 @@ export default function ManagerScheduler({
 
         if (!shiftId || isOffShift(shiftId)) {
           consecutiveWork = 0;
+          consecutiveNight = 0;
+          consecutiveOff++;
+          if (consecutiveOff > wardRules.maxConsecutiveOff) {
+            warnings.push({ id: `warn-off-${staff.id}-${day}`, staffName: staff.name, day, message: `${staff.name}: 연속 휴무 ${consecutiveOff}일 (설정 한도: ${wardRules.maxConsecutiveOff}일)` });
+          }
           continue;
+        }
+        consecutiveOff = 0;
+        if (isNightShift(shiftId)) {
+          nightCount++;
+          consecutiveNight++;
+          if (consecutiveNight > wardRules.maxConsecutiveNight) {
+            warnings.push({ id: `warn-night-run-${staff.id}-${day}`, staffName: staff.name, day, message: `${staff.name}: ${wardRules.maxConsecutiveNight}일을 초과한 연속 나이트 배정` });
+          }
+        } else {
+          consecutiveNight = 0;
         }
 
         // 1. Max consecutive work check
@@ -558,6 +761,17 @@ export default function ManagerScheduler({
             message: `${staff.name}: ${day - 1}일 야간/마감 근무 후 ${day}일 휴일 없이 교대근무 배치 (야간 휴식의무 위반)`
           });
         }
+
+        const sequence = [day - 3, day - 2, day - 1, day]
+          .filter(d => d >= 1)
+          .map(d => getPatternCode(monthRoster[staff.id]?.[d]))
+          .join('');
+        [...wardRules.forbiddenPatterns, ...wardRules.avoidPatterns].forEach(pattern => {
+          const normalized = String(pattern || '').replace(/[^A-Za-z가-힣]/g, '').toUpperCase();
+          if (normalized && sequence.endsWith(normalized)) {
+            warnings.push({ id: `warn-pattern-${staff.id}-${day}-${normalized}`, staffName: staff.name, day, message: `${staff.name}: 설정된 ${wardRules.forbiddenPatterns.includes(pattern) ? '금지' : '회피'} 패턴 ${normalized} 감지` });
+          }
+        });
 
         // 4. Special Requests: Night Avoidance
         if (staff.specialRequests?.nightAvoid && (shiftId === 'N' || shiftId === 'CLOSE')) {
@@ -628,6 +842,9 @@ export default function ManagerScheduler({
           });
         }
       });
+      if (nightCount < (staff.minNightShifts || 0) || nightCount > (staff.maxNightShifts ?? 999)) {
+        warnings.push({ id: `warn-night-total-${staff.id}`, staffName: staff.name, day: 1, message: `${staff.name}: 나이트 ${nightCount}회 (개인 설정 ${staff.minNightShifts || 0}~${staff.maxNightShifts ?? 999}회)` });
+      }
     });
 
     // 8. Shift Specific constraints (newbie-only checks)
@@ -654,6 +871,17 @@ export default function ManagerScheduler({
           }
         });
       }
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      priorityShiftIds.forEach(shiftId => {
+        const required = getRequiredCount(day, shiftId);
+        if (required === null) return;
+        const actual = staffList.filter(s => monthRoster[s.id]?.[day] === shiftId).length;
+        if (actual !== required) {
+          warnings.push({ id: `warn-coverage-${day}-${shiftId}`, staffName: '커버리지', day, message: `${day}일 ${shiftId}: 필요 ${required}명 / 배정 ${actual}명 (${actual < required ? `부족 ${required - actual}` : `초과 ${actual - required}`})` });
+        }
+      });
     }
 
     return warnings;
@@ -734,6 +962,22 @@ export default function ManagerScheduler({
 
     setCurrentShifts(prev => prev.filter(s => s.id !== shiftId));
 
+    setManualRequests(prev => {
+      const next = { ...prev };
+      Object.keys(next).forEach(monthKey => {
+        const month = { ...(next[monthKey] || {}) };
+        Object.keys(month).forEach(staffId => {
+          const staffRequests = { ...(month[staffId] || {}) };
+          Object.keys(staffRequests).forEach(day => {
+            if (staffRequests[day]?.shiftId === shiftId) delete staffRequests[day];
+          });
+          month[staffId] = staffRequests;
+        });
+        next[monthKey] = month;
+      });
+      return next;
+    });
+
     // Clear assignments in roster
     setRoster(prev => {
       const copy = { ...prev };
@@ -762,15 +1006,24 @@ export default function ManagerScheduler({
   }, [currentShifts]);
 
   // Save to localStorage
-  const handleSaveAll = () => {
+  const handleSaveAll = async () => {
     localStorage.setItem('weplan_manager_staff', JSON.stringify(staffList));
     localStorage.setItem('weplan_manager_roster', JSON.stringify(roster));
+    localStorage.setItem('weplan_manager_manual_requests', JSON.stringify(manualRequests));
     
     // Sync to main calendar events
-    if (setEvents) {
-      syncRosterToCalendarEvents();
+    const syncResult = syncRosterToCalendarEvents();
+    let publishedSharedCount = 0;
+    if (currentUser?.id) {
+      try {
+        const published = await api.publishManagerSchedules(currentUser.id, currentMonthKey, syncResult.publishEvents);
+        publishedSharedCount = (published || []).filter(event => event.ownerUserId !== currentUser.id).length;
+      } catch (error) {
+        alert('근무표는 저장했지만 일부 캘린더 연동에 실패했습니다. 수락 상태와 서버 연결을 확인해 주세요.');
+        return;
+      }
     }
-    alert('근무 스케줄표가 안전하게 저장 및 캘린더에 연동되었습니다! 💾');
+    alert(`근무표를 저장했습니다. 내 캘린더 ${syncResult.ownEvents.length}건${publishedSharedCount > 0 ? `, 수락한 조원 캘린더 ${publishedSharedCount}건` : ''}을 연동했습니다.`);
   };
 
   // Sync current month roster into main app events
@@ -780,17 +1033,24 @@ export default function ManagerScheduler({
     
     // 1. Remove existing manager-scheduled events for this month
     const cleanEvents = events.filter(evt => {
-      if (evt.isManagerScheduled && evt.date && evt.date.startsWith(currentMonthKey)) {
+      if (evt.isManagerScheduled && evt.date && evt.date.startsWith(currentMonthKey)
+          && (!currentUser?.id || evt.scheduleManagerUserId === currentUser.id || !evt.scheduleManagerUserId)) {
         return false;
       }
       return true;
     });
 
-    // 2. Build new events from roster
-    const newEvents = [];
+    const ownEvents = [];
+    const publishEvents = [];
+    const fallbackUserName = currentUser?.nickname || localStorage.getItem('weplan_username') || '';
     Object.keys(monthRoster).forEach(staffId => {
       const staff = staffList.find(s => s.id === staffId);
       if (!staff) return;
+      const isCurrentUser = currentUser?.id
+        ? staff.linkedUserId === currentUser.id || (!staff.linkedUserId && staff.name === fallbackUserName)
+        : staff.name === fallbackUserName;
+      const acceptedTargetUserId = staff.linkedUserId && staff.syncStatus !== 'rejected' ? staff.linkedUserId : '';
+      if (!isCurrentUser && !acceptedTargetUserId) return;
 
       const daysObj = monthRoster[staffId] || {};
       Object.keys(daysObj).forEach(dayStr => {
@@ -800,8 +1060,9 @@ export default function ManagerScheduler({
 
         const dateFormatted = `${currentMonthKey}-${String(dayStr).padStart(2, '0')}`;
         
-        newEvents.push({
-          id: `mgr-evt-${staffId}-${dateFormatted}`,
+        const ownerUserId = isCurrentUser ? (currentUser?.id || '') : acceptedTargetUserId;
+        const event = {
+          id: `mgr-evt-${currentUser?.id || 'local'}-${staffId}-${dateFormatted}`,
           type: 'shift',
           isManagerScheduled: true,
           staffName: staff.name,
@@ -810,12 +1071,18 @@ export default function ManagerScheduler({
           date: dateFormatted,
           title: `[근무] ${staff.name}: ${shiftInfo.label}`,
           time: `${shiftInfo.start} - ${shiftInfo.end}`,
-          color: shiftInfo.color
-        });
+          color: shiftInfo.color,
+          ownerUserId,
+          scheduleManagerUserId: currentUser?.id || '',
+          scheduleStaffId: staff.id
+        };
+        publishEvents.push(event);
+        if (isCurrentUser) ownEvents.push(event);
       });
     });
 
-    setEvents([...cleanEvents, ...newEvents]);
+    if (setEvents) setEvents([...cleanEvents, ...ownEvents]);
+    return { ownEvents, publishEvents, sharedCount: publishEvents.length - ownEvents.length };
   };
 
   // Helper: Get days in selected month
@@ -884,10 +1151,33 @@ export default function ManagerScheduler({
     });
   };
 
+  const setManualRequest = (staffId, day, request) => {
+    setManualRequests(prev => {
+      const month = { ...(prev[currentMonthKey] || {}) };
+      const staffRequests = { ...(month[staffId] || {}) };
+      if (request) staffRequests[day] = request;
+      else delete staffRequests[day];
+      month[staffId] = staffRequests;
+      return { ...prev, [currentMonthKey]: month };
+    });
+  };
+
+  const getManualRequest = (staffId, day) => manualRequests[currentMonthKey]?.[staffId]?.[day] || null;
+
   // Click on a cell to assign shift
   const handleCellClick = (staffId, day) => {
+    if (manualTool === 'clear') {
+      setCellShift(staffId, day, '');
+      setManualRequest(staffId, day, null);
+      return;
+    }
     if (!selectedBrush) return;
     setCellShift(staffId, day, selectedBrush);
+    if (manualTool === 'preferred' || manualTool === 'fixed') {
+      setManualRequest(staffId, day, { shiftId: selectedBrush, type: manualTool });
+    } else {
+      setManualRequest(staffId, day, null);
+    }
   };
 
   // Auto Schedule Algorithm (AI/Rule-based Roster Generator)
@@ -903,6 +1193,9 @@ export default function ManagerScheduler({
     }
 
     const currentMonthRoster = roster[currentMonthKey] || {};
+    const generationStartedAt = performance.now();
+    const generationDeadline = generationStartedAt + 25000;
+    let generationTimedOut = false;
     const newMonthRoster = {};
     const newMonthLogs = {}; // staffId -> { day -> reasonString }
     const offShift = currentShifts.find(s => s.id === 'O' || s.id === 'OFF');
@@ -914,10 +1207,12 @@ export default function ManagerScheduler({
       newMonthLogs[s.id] = {};
       for (let d = 1; d <= daysInMonth; d++) {
         const existing = currentMonthRoster[s.id]?.[d];
-        if (existing && existing !== '') {
-          newMonthRoster[s.id][d] = existing;
-          const shiftInfo = currentShifts.find(sh => sh.id === existing);
-          newMonthLogs[s.id][d] = `수동 지정된 근무/휴무(${shiftInfo?.label || existing}) 일정을 그대로 보존하여 배정되었습니다.`;
+        const request = manualRequests[currentMonthKey]?.[s.id]?.[d];
+        const fixedShiftId = request?.type === 'fixed' ? request.shiftId : (!request && existing ? existing : '');
+        if (fixedShiftId) {
+          newMonthRoster[s.id][d] = fixedShiftId;
+          const shiftInfo = currentShifts.find(sh => sh.id === fixedShiftId);
+          newMonthLogs[s.id][d] = `${request?.type === 'fixed' ? '확정 요청' : '기존 수동 배정'}(${shiftInfo?.label || fixedShiftId})을 변경하지 않고 반영했습니다.`;
         }
       }
     });
@@ -961,6 +1256,26 @@ export default function ManagerScheduler({
       return count;
     };
 
+    const getConsecutiveShiftCount = (staffId, targetDay, matcher) => {
+      let count = 0;
+      for (let d = targetDay - 1; d >= 1; d--) {
+        if (matcher(newMonthRoster[staffId][d])) count++;
+        else break;
+      }
+      return count;
+    };
+
+    const createsBlockedPattern = (staffId, targetShiftId, day) => {
+      const codes = [];
+      for (let d = Math.max(1, day - 3); d < day; d++) codes.push(getPatternCode(newMonthRoster[staffId][d]));
+      codes.push(getPatternCode(targetShiftId));
+      const sequence = codes.join('');
+      return (wardRules.forbiddenPatterns || []).some(pattern => {
+        const normalized = String(pattern || '').replace(/[^A-Za-z가-힣]/g, '').toUpperCase();
+        return normalized && sequence.endsWith(normalized);
+      });
+    };
+
     // Helper to calculate workdays in target calendar week (Sunday - Saturday)
     const getWeeklyWorkDays = (staffId, targetDay) => {
       const dObj = new Date(selectedYear, selectedMonth - 1, targetDay);
@@ -1000,6 +1315,11 @@ export default function ManagerScheduler({
 
     const checkPartnerAvailable = (partner, targetShiftId, day) => {
       if (newMonthRoster[partner.id][day]) return false;
+      if (!isStaffActiveOnDay(partner, day)) return false;
+      if (partner.allowedShiftIds?.length > 0 && !partner.allowedShiftIds.includes(targetShiftId)) return false;
+      if (createsBlockedPattern(partner.id, targetShiftId, day)) return false;
+      if (isNightShift(targetShiftId) && (shiftCounts[partner.id]?.[targetShiftId] || 0) >= (partner.maxNightShifts ?? 999)) return false;
+      if (isNightShift(targetShiftId) && getConsecutiveShiftCount(partner.id, day, isNightShift) >= wardRules.maxConsecutiveNight) return false;
       const yesterdayVal = day > 1 ? newMonthRoster[partner.id][day - 1] : null;
       if (yesterdayVal === 'N' || yesterdayVal === 'CLOSE') return false;
       
@@ -1043,6 +1363,14 @@ export default function ManagerScheduler({
       staffList.forEach(staff => {
         // Already assigned today
         if (newMonthRoster[staff.id][day]) return;
+        if (!isStaffActiveOnDay(staff, day)) return;
+        if (staff.allowedShiftIds?.length > 0 && !staff.allowedShiftIds.includes(sId)) return;
+        if (createsBlockedPattern(staff.id, sId, day)) return;
+        if (isNightShift(sId) && (shiftCounts[staff.id]?.[sId] || 0) >= (staff.maxNightShifts ?? 999)) return;
+        if (isNightShift(sId) && getConsecutiveShiftCount(staff.id, day, isNightShift) >= wardRules.maxConsecutiveNight) return;
+
+        const preferredRequest = manualRequests[currentMonthKey]?.[staff.id]?.[day];
+        if (level === 1 && preferredRequest?.type === 'preferred' && preferredRequest.shiftId !== sId) return;
 
         // CRITICAL constraint: Night/CLOSE yesterday -> today MUST REST (O)
         const yesterdayVal = day > 1 ? newMonthRoster[staff.id][day - 1] : null;
@@ -1091,7 +1419,10 @@ export default function ManagerScheduler({
           consecDays,
           weeklyWork,
           specificShiftCount: shiftCounts[staff.id][sId] || 0,
-          totalWorkDays: workDaysCount[staff.id]
+          totalWorkDays: workDaysCount[staff.id],
+          targetGap: (staff.targetWorkDays || Math.floor(daysInMonth * 0.72)) - workDaysCount[staff.id],
+          nightMinimumGap: isNightShift(sId) ? Math.max(0, (staff.minNightShifts || 0) - Object.entries(shiftCounts[staff.id]).filter(([id]) => isNightShift(id)).reduce((sum, [, count]) => sum + count, 0)) : 0,
+          isPreferred: manualRequests[currentMonthKey]?.[staff.id]?.[day]?.type === 'preferred' && manualRequests[currentMonthKey]?.[staff.id]?.[day]?.shiftId === sId
         });
       });
 
@@ -1120,6 +1451,10 @@ export default function ManagerScheduler({
 
     // 2. Loop through days to schedule
     for (let day = 1; day <= daysInMonth; day++) {
+      if (performance.now() >= generationDeadline) {
+        generationTimedOut = true;
+        break;
+      }
       const totalStaff = staffList.length;
 
       // Determine required personnel counts dynamically
@@ -1140,6 +1475,10 @@ export default function ManagerScheduler({
       // Others get 20% divided or at least 1
       otherShifts.forEach(s => {
         reqCounts[s.id] = Math.max(1, Math.floor(totalStaff * (0.20 / Math.max(1, otherShifts.length))));
+      });
+      activeShifts.forEach(s => {
+        const configured = getRequiredCount(day, s.id);
+        if (configured !== null) reqCounts[s.id] = configured;
       });
 
       // Ensure total daily required shifts don't exceed totalStaff - 1 (leave at least one off)
@@ -1193,6 +1532,10 @@ export default function ManagerScheduler({
         const maxAttempts = staffList.length * 2;
 
         while (needed > 0 && attempts < maxAttempts) {
+          if (performance.now() >= generationDeadline) {
+            generationTimedOut = true;
+            break;
+          }
           attempts++;
 
           // Count seniors/juniors already assigned to this shift today
@@ -1225,6 +1568,8 @@ export default function ManagerScheduler({
           // 3. Lowest total workdays count (Greedy work frequency balancing)
           // 4. Lowest consecutive work days
           candidates.sort((a, b) => {
+            if (a.isPreferred !== b.isPreferred) return a.isPreferred ? -1 : 1;
+            if (a.nightMinimumGap !== b.nightMinimumGap) return b.nightMinimumGap - a.nightMinimumGap;
             if (wardRules.protectJuniors) {
               const needSenior = (seniorsAssigned === 0 && (juniorsAssigned > 0 || needed === 1));
               if (needSenior) {
@@ -1236,6 +1581,7 @@ export default function ManagerScheduler({
               return a.specificShiftCount - b.specificShiftCount;
             }
             if (a.totalWorkDays !== b.totalWorkDays) {
+              if (a.targetGap !== b.targetGap) return b.targetGap - a.targetGap;
               return a.totalWorkDays - b.totalWorkDays;
             }
             return a.consecDays - b.consecDays;
@@ -1281,6 +1627,8 @@ export default function ManagerScheduler({
         }
       });
 
+      if (generationTimedOut) break;
+
       // 3. Assign remainder of staff as OFF/O
       staffList.forEach(staff => {
         if (!newMonthRoster[staff.id][day]) {
@@ -1289,6 +1637,11 @@ export default function ManagerScheduler({
           newMonthLogs[staff.id][day] = `AI 휴무 배정: 근무 휴식 규정 및 비근무일 배분 조정`;
         }
       });
+    }
+
+    if (generationTimedOut) {
+      alert('자동 생성이 25초 제한에 도달하여 중단되었습니다. 기존 근무표는 변경되지 않았습니다. 인원 또는 제약 조건을 조정한 뒤 다시 시도해 주세요.');
+      return;
     }
 
     setRoster(prev => ({
@@ -1303,12 +1656,49 @@ export default function ManagerScheduler({
   };
 
   // Clear Roster for current month
-  const handleClearRoster = () => {
-    if (!window.confirm('현재 월의 모든 스케줄 배치를 초기화하시겠습니까?')) return;
-    setRoster(prev => ({
-      ...prev,
-      [currentMonthKey]: {}
-    }));
+  const handleClearRoster = async (preserveFixed) => {
+    if (preserveFixed) {
+      if (!window.confirm('확정 근무는 그대로 두고, 현재 월의 나머지 배정과 희망 근무를 모두 비우시겠습니까?')) return;
+      const monthRequests = manualRequests[currentMonthKey] || {};
+      const fixedRoster = {};
+      const fixedRequests = {};
+
+      staffList.forEach(staff => {
+        const staffFixedRoster = {};
+        const staffFixedRequests = {};
+        Object.entries(monthRequests[staff.id] || {}).forEach(([day, request]) => {
+          if (request?.type === 'fixed' && request.shiftId) {
+            staffFixedRoster[day] = request.shiftId;
+            staffFixedRequests[day] = request;
+          }
+        });
+        if (Object.keys(staffFixedRoster).length > 0) fixedRoster[staff.id] = staffFixedRoster;
+        if (Object.keys(staffFixedRequests).length > 0) fixedRequests[staff.id] = staffFixedRequests;
+      });
+
+      setRoster(prev => ({ ...prev, [currentMonthKey]: fixedRoster }));
+      setManualRequests(prev => ({ ...prev, [currentMonthKey]: fixedRequests }));
+    } else {
+      if (!window.confirm('확정 근무를 포함해 현재 월의 모든 근무를 삭제하시겠습니까? 본인과 연동된 조원 캘린더에서도 해당 월 근무가 제거됩니다.')) return;
+      setRoster(prev => ({ ...prev, [currentMonthKey]: {} }));
+      setManualRequests(prev => ({ ...prev, [currentMonthKey]: {} }));
+      localStorage.setItem('weplan_manager_roster', JSON.stringify({ ...roster, [currentMonthKey]: {} }));
+      localStorage.setItem('weplan_manager_manual_requests', JSON.stringify({ ...manualRequests, [currentMonthKey]: {} }));
+      if (setEvents) {
+        setEvents(prev => prev.filter(event => !(event.isManagerScheduled && event.date?.startsWith(currentMonthKey)
+          && (!currentUser?.id || event.scheduleManagerUserId === currentUser.id || !event.scheduleManagerUserId))));
+      }
+      if (currentUser?.id) {
+        try {
+          await api.publishManagerSchedules(currentUser.id, currentMonthKey, []);
+        } catch (error) {
+          alert('편성표는 비웠지만 캘린더 근무 삭제에 실패했습니다. 서버 연결 후 다시 시도해 주세요.');
+          return;
+        }
+      }
+      alert('현재 월의 근무를 편성표와 연동 캘린더에서 모두 삭제했습니다.');
+    }
+    setAssignmentAuditLogs(prev => ({ ...prev, [currentMonthKey]: {} }));
   };
 
   // Staff Management Handlers
@@ -1325,7 +1715,19 @@ export default function ManagerScheduler({
       role: newStaffRole,
       team: newStaffTeam ? newStaffTeam.trim() : '',
       color: randomColor,
-      expLevel: newStaffExpLevel
+      expLevel: newStaffExpLevel,
+      avoidWith: [],
+      specialNote: '',
+      allowedShiftIds: [],
+      minNightShifts: 0,
+      maxNightShifts: 6,
+      targetWorkDays: 0,
+      employmentStartDate: '',
+      employmentEndDate: '',
+      linkedUserId: '',
+      linkedUserNickname: '',
+      syncStatus: '',
+      specialRequests: { nightAvoid: false, weekendOff: false, couplingWith: '' }
     };
 
     setStaffList([...staffList, newStaff]);
@@ -1337,6 +1739,53 @@ export default function ManagerScheduler({
   const handleDeleteStaff = (id) => {
     if (!window.confirm('이 근무자를 삭제하시겠습니까? 관련 스케줄 정보도 비워집니다.')) return;
     setStaffList(staffList.filter(s => s.id !== id));
+  };
+
+  const handleImportStaffCSV = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const lines = String(reader.result || '').replace(/^\uFEFF/, '').split(/\r?\n/).filter(Boolean);
+      if (lines.length < 2) {
+        alert('헤더와 한 명 이상의 조원 데이터가 있는 CSV 파일을 선택해 주세요.');
+        return;
+      }
+      const split = (line) => line.split(',').map(value => value.trim().replace(/^"|"$/g, ''));
+      const headers = split(lines[0]);
+      const indexOf = (...names) => headers.findIndex(h => names.includes(h));
+      const indexes = {
+        name: indexOf('이름', '조원 이름', '근무자'), role: indexOf('직급', '역할', '직급/구분'), team: indexOf('팀', '소속 팀/조'),
+        level: indexOf('숙련도', '레벨'), allowed: indexOf('가능근무', '가능 근무'), minNight: indexOf('나이트최소', '나이트 최소'),
+        maxNight: indexOf('나이트최대', '나이트 최대'), target: indexOf('목표근무일', '목표 근무일수'), start: indexOf('시작일', '근무 시작일'), end: indexOf('종료일', '근무 종료일')
+      };
+      if (indexes.name < 0) {
+        alert('CSV 헤더에 "이름" 열이 필요합니다.');
+        return;
+      }
+      const colors = ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#8b5cf6', '#ef4444', '#14b8a6'];
+      const imported = lines.slice(1).map((line, rowIndex) => {
+        const cells = split(line);
+        const get = (key) => indexes[key] >= 0 ? cells[indexes[key]] || '' : '';
+        const allowedCodes = get('allowed').split(/[|/\s]+/).filter(Boolean).map(code => {
+          const shift = currentShifts.find(s => s.id.toUpperCase() === code.toUpperCase() || s.code.toUpperCase() === code.toUpperCase());
+          return shift?.id;
+        }).filter(Boolean);
+        return {
+          id: `staff-${Date.now()}-${rowIndex}`,
+          name: get('name'), role: get('role') || customRoles[0], team: get('team'), color: colors[rowIndex % colors.length],
+          expLevel: get('level') || customExpLevels[0]?.id || 'senior', avoidWith: [], specialNote: '', allowedShiftIds: allowedCodes,
+          minNightShifts: Math.max(0, Number(get('minNight')) || 0), maxNightShifts: Math.max(0, Number(get('maxNight')) || 6),
+          targetWorkDays: Math.max(0, Number(get('target')) || 0), employmentStartDate: get('start'), employmentEndDate: get('end'),
+          linkedUserId: '', linkedUserNickname: '', syncStatus: '',
+          specialRequests: { nightAvoid: false, weekendOff: false, couplingWith: '' }
+        };
+      }).filter(staff => staff.name);
+      setStaffList(prev => [...prev, ...imported.filter(staff => !prev.some(existing => existing.name === staff.name))]);
+      alert(`${imported.length}명의 조원 정보를 불러왔습니다. 같은 이름의 기존 조원은 유지됩니다.`);
+    };
+    reader.readAsText(file, 'UTF-8');
   };
 
   // Export CSV
@@ -1844,7 +2293,7 @@ export default function ManagerScheduler({
           visibility: hidden;
           opacity: 0;
           position: absolute;
-          bottom: 125%;
+          bottom: calc(100% + 6px);
           left: 50%;
           transform: translate(-50%, 10px);
           background-color: var(--bg-card);
@@ -1860,7 +2309,8 @@ export default function ManagerScheduler({
           gap: 12px;
         }
 
-        .hover-popover-container:hover .hover-popover-content {
+        .hover-popover-container:hover .hover-popover-content,
+        .hover-popover-container:focus-within .hover-popover-content {
           visibility: visible;
           opacity: 1;
           pointer-events: auto;
@@ -1877,6 +2327,17 @@ export default function ManagerScheduler({
           border-style: solid;
           border-color: var(--bg-card) transparent transparent transparent;
           filter: drop-shadow(0 1px 0 var(--border-color));
+        }
+
+        /* 버튼과 팝오버 사이의 빈 공간에서도 hover가 끊기지 않도록 연결 영역을 둔다. */
+        .hover-popover-content::before {
+          content: "";
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: 100%;
+          height: 10px;
+          background: transparent;
         }
 
         @media (max-width: 900px) {
@@ -1919,7 +2380,8 @@ export default function ManagerScheduler({
             transform: translate(0, 10px);
           }
 
-          .hover-popover-container:hover .hover-popover-content {
+          .hover-popover-container:hover .hover-popover-content,
+          .hover-popover-container:focus-within .hover-popover-content {
             transform: translate(0, 0);
           }
         }
@@ -2040,127 +2502,67 @@ export default function ManagerScheduler({
             </button>
           </div>
 
-          {/* Inline Brush Selector */}
-          <div className="brush-selector" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', marginRight: '4px' }}>
-            <span style={{ fontSize: '11.5px', fontWeight: '800', color: 'var(--text-muted)', marginRight: '2px' }}>
-              🎨 브러시:
-            </span>
-            {currentShifts.map(s => {
-              const isActive = selectedBrush === s.id;
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => setSelectedBrush(s.id)}
-                  className={`brush-btn ${isActive ? 'active' : ''}`}
-                  style={{
-                    backgroundColor: s.bg,
-                    color: s.color,
-                    border: isActive ? `2.5px solid ${s.color}` : '1.5px solid var(--border-color)',
-                    padding: '4px 10px',
-                    fontSize: '11.5px',
-                    borderRadius: '6px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    cursor: 'pointer',
-                    height: '28px',
-                    boxSizing: 'border-box',
-                    transition: 'all 0.15s',
-                    fontWeight: isActive ? '800' : '500'
-                  }}
-                >
-                  <span className="shift-badge" style={{ backgroundColor: s.color, color: '#fff', width: '16px', height: '16px', fontSize: '8px', borderRadius: '3px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {s.code}
-                  </span>
-                  <span>{s.label}</span>
-                </button>
-              );
-            })}
-            
-            {/* Brush Edit Button */}
-            <button 
-              type="button"
-              onClick={() => setShowBrushManagerModal(true)}
-              className="arrow-btn"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-                color: showBrushManagerModal ? 'var(--primary)' : 'var(--text-muted)',
-                borderColor: showBrushManagerModal ? 'var(--primary)' : 'var(--border-color)',
-                backgroundColor: showBrushManagerModal ? 'var(--primary-light)' : '#ffffff',
-                padding: '0 12px',
-                height: '32px',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                border: '1.5px solid var(--border-color)',
-                fontSize: '12px',
-                fontWeight: '800',
-                transition: 'all 0.15s'
-              }}
-              title="브러시 추가/편집 설정"
-            >
-              <Paintbrush size={14} />
-              <span>브러시 설정</span>
+        </div>
+      </div>
+
+      {incomingSyncRequests.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px', border: '1px solid #bfdbfe', borderRadius: '10px', background: '#eff6ff' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#1d4ed8', fontSize: '12px', fontWeight: '850' }}>
+            <Link2 size={15} /> 근무표 캘린더 연동 요청
+          </div>
+          {incomingSyncRequests.map(request => (
+            <div key={request.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', padding: '8px 10px', background: '#fff', borderRadius: '7px', border: '1px solid #dbeafe' }}>
+              <span style={{ flex: 1, minWidth: '220px', fontSize: '11.5px', color: 'var(--text-main)' }}><b>{request.managerName}</b>님이 <b>{request.staffName}</b> 조원의 근무표를 내 캘린더에 연동하려고 합니다.</span>
+              <button type="button" className="btn-action-solid" onClick={() => handleRespondScheduleSync(request, 'accepted')} style={{ padding: '5px 9px', fontSize: '10.5px' }}><Check size={13} /> 수락</button>
+              <button type="button" className="btn-action-outline" onClick={() => handleRespondScheduleSync(request, 'rejected')} style={{ padding: '5px 9px', fontSize: '10.5px' }}><X size={13} /> 거절</button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '9px', padding: '10px 12px', border: '1px solid var(--border-color)', borderRadius: '10px', background: '#f8fafc' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '12px', fontWeight: '850', color: 'var(--text-main)', marginRight: '4px' }}>직접 편성 도구</span>
+          {[
+            ['assign', '직접 배정', '선택한 브러시로 근무를 직접 배정합니다.', PenLine],
+            ['preferred', '희망 근무', '자동 생성 시 우선 반영할 희망 근무를 입력합니다.', Star],
+            ['fixed', '확정 근무', '자동 생성에서도 절대 변경하지 않는 근무·연차·공가를 입력합니다.', LockKeyhole],
+            ['clear', '칸 비우기', '배정 및 요청을 함께 삭제합니다.', Eraser]
+          ].map(([tool, label, title, ToolIcon]) => (
+            <button key={tool} type="button" onClick={() => setManualTool(tool)} title={title} className={manualTool === tool ? 'btn-action-solid' : 'btn-action-outline'} style={{ padding: '6px 10px', fontSize: '11px' }}>
+              <ToolIcon size={13} strokeWidth={2.2} />
+              {label}
+            </button>
+          ))}
+          <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>편성 방식과 근무 브러시를 선택한 뒤 날짜 칸을 클릭하세요.</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginLeft: 'auto', paddingLeft: '10px', borderLeft: '1px solid var(--border-color)' }}>
+            <span style={{ fontSize: '10px', fontWeight: '800', color: 'var(--text-muted)' }}>편성 설정</span>
+            <button type="button" onClick={() => setShowStaffManagerModal(true)} className="btn-action-outline" style={{ padding: '6px 9px', fontSize: '11px', color: showStaffManagerModal ? 'var(--primary)' : 'var(--text-main)', backgroundColor: showStaffManagerModal ? 'var(--primary-light)' : '#fff' }} title="근무 조원 관리">
+              <UserCheck size={13} /> 조원 관리
+            </button>
+            <button type="button" onClick={() => setShowRulesPanel(true)} className="btn-action-outline" style={{ padding: '6px 9px', fontSize: '11px', color: showRulesPanel ? 'var(--primary)' : 'var(--text-main)', backgroundColor: showRulesPanel ? 'var(--primary-light)' : '#fff' }} title="근무 환경 및 규정 설정">
+              <Settings size={13} /> 근무 규정
             </button>
           </div>
+        </div>
 
-          {/* Icon control buttons */}
-          <button 
-            type="button"
-            onClick={() => setShowStaffManagerModal(true)} 
-            className="arrow-btn" 
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              gap: '6px',
-              color: showStaffManagerModal ? 'var(--primary)' : 'var(--text-muted)', 
-              borderColor: showStaffManagerModal ? 'var(--primary)' : 'var(--border-color)',
-              backgroundColor: showStaffManagerModal ? 'var(--primary-light)' : '#ffffff',
-              padding: '0 12px',
-              height: '32px',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              border: '1.5px solid var(--border-color)',
-              fontSize: '12px',
-              fontWeight: '800',
-              transition: 'all 0.15s'
-            }} 
-            title="근무 조원 관리"
-          >
-            <UserCheck size={14} />
-            <span>조원 관리</span>
+        <div className="brush-selector" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', paddingTop: '8px', borderTop: '1px dashed var(--border-color)' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11.5px', fontWeight: '800', color: 'var(--text-muted)', marginRight: '2px' }}>
+            <Paintbrush size={13} /> 근무 브러시
+          </span>
+          {currentShifts.map(s => {
+            const isActive = selectedBrush === s.id;
+            return (
+              <button key={s.id} type="button" onClick={() => setSelectedBrush(s.id)} className={`brush-btn ${isActive ? 'active' : ''}`} style={{ backgroundColor: s.bg, color: s.color, border: isActive ? `2.5px solid ${s.color}` : '1.5px solid var(--border-color)', padding: '4px 10px', fontSize: '11.5px', borderRadius: '6px', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer', height: '28px', boxSizing: 'border-box', transition: 'all 0.15s', fontWeight: isActive ? '800' : '500' }}>
+                <span className="shift-badge" style={{ backgroundColor: s.color, color: '#fff', width: '16px', height: '16px', fontSize: '8px', borderRadius: '3px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{s.code}</span>
+                <span>{s.label}</span>
+              </button>
+            );
+          })}
+          <button type="button" onClick={() => setShowBrushManagerModal(true)} className="btn-action-outline" style={{ padding: '5px 10px', fontSize: '11px' }} title="브러시 추가/편집 설정">
+            <Settings size={13} /> 브러시 설정
           </button>
-
-          <button 
-            type="button"
-            onClick={() => setShowRulesPanel(true)} 
-            className="arrow-btn" 
-            style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              gap: '6px',
-              color: showRulesPanel ? 'var(--primary)' : 'var(--text-muted)', 
-              borderColor: showRulesPanel ? 'var(--primary)' : 'var(--border-color)',
-              backgroundColor: showRulesPanel ? 'var(--primary-light)' : '#ffffff',
-              padding: '0 12px',
-              height: '32px',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              border: '1.5px solid var(--border-color)',
-              fontSize: '12px',
-              fontWeight: '800',
-              transition: 'all 0.15s'
-            }} 
-            title="근무 환경 및 규정 설정"
-          >
-            <Settings size={14} />
-            <span>근무 규정 설정</span>
-          </button>
+          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>연차·공가는 브러시 설정에서 유형을 추가할 수 있습니다.</span>
         </div>
       </div>
 
@@ -2270,17 +2672,21 @@ export default function ManagerScheduler({
                         const assignedShiftId = getCellShift(staff.id, d.day);
                         const shiftInfo = currentShifts.find(s => s.id === assignedShiftId);
                         const logReason = assignmentAuditLogs[currentMonthKey]?.[staff.id]?.[d.day];
+                        const manualRequest = getManualRequest(staff.id, d.day);
 
                         return (
                           <td 
                             key={d.day} 
                             className={`cell-shift-editable ${logReason ? 'cell-ai-logged' : ''}`}
                             onClick={() => handleCellClick(staff.id, d.day)}
-                            title={logReason || "수동 편집 또는 기본 일정"}
+                            title={manualRequest ? `${manualRequest.type === 'fixed' ? '확정 근무: 자동 생성 시 변경되지 않음' : '희망 근무: 자동 생성 시 우선 반영'} · 클릭하여 다시 지정` : (logReason || "직접 편집")}
                             style={{
                               backgroundColor: shiftInfo ? shiftInfo.bg : '#ffffff',
                               color: shiftInfo ? shiftInfo.color : 'inherit',
-                              padding: '4px 0'
+                              padding: '4px 0',
+                              position: 'relative',
+                              outline: manualRequest?.type === 'fixed' ? '2px solid #2563eb' : manualRequest?.type === 'preferred' ? '2px dashed #f59e0b' : 'none',
+                              outlineOffset: '-2px'
                             }}
                           >
                             {shiftInfo ? (
@@ -2295,6 +2701,11 @@ export default function ManagerScheduler({
                               </span>
                             ) : (
                               <span style={{ color: '#cbd5e1' }}>-</span>
+                            )}
+                            {manualRequest && (
+                              <span style={{ position: 'absolute', top: '1px', right: '1px', lineHeight: 1, color: manualRequest.type === 'fixed' ? '#2563eb' : '#d97706' }}>
+                                {manualRequest.type === 'fixed' ? <LockKeyhole size={8} strokeWidth={2.4} /> : <Star size={8} strokeWidth={2.4} />}
+                              </span>
                             )}
                           </td>
                         );
@@ -2352,17 +2763,20 @@ export default function ManagerScheduler({
                     </td>
                     {daysArray.map(d => {
                       const count = dailyStats[d.day]?.[s.id] || 0;
+                      const required = getRequiredCount(d.day, s.id);
+                      const coverageState = required === null || count === required ? 'ok' : (count < required ? 'shortage' : 'excess');
                       return (
                         <td 
                           key={d.day} 
+                          title={required === null ? `${count}명 배정` : `필요 ${required}명 / 배정 ${count}명${coverageState === 'shortage' ? ` (부족 ${required - count})` : coverageState === 'excess' ? ` (초과 ${count - required})` : ''}`}
                           style={{ 
                             fontWeight: count > 0 ? '700' : '400',
-                            color: count > 0 ? s.color : '#94a3b8',
-                            backgroundColor: count > 0 ? s.bg + '50' : '#fafbfc',
+                            color: coverageState === 'shortage' ? '#dc2626' : coverageState === 'excess' ? '#b45309' : (count > 0 ? s.color : '#94a3b8'),
+                            backgroundColor: coverageState === 'shortage' ? '#fef2f2' : coverageState === 'excess' ? '#fffbeb' : (count > 0 ? s.bg + '50' : '#fafbfc'),
                             fontSize: '11px'
                           }}
                         >
-                          {count > 0 ? count : '-'}
+                          {count > 0 ? count : '-'}{required !== null && coverageState !== 'ok' ? (coverageState === 'shortage' ? '↓' : '↑') : ''}
                         </td>
                       );
                     })}
@@ -2383,22 +2797,34 @@ export default function ManagerScheduler({
               title="교대근무 휴무 보장 룰 및 인원 균등 분배 알고리즘을 이용한 자동 생성"
             >
               <Sparkles size={16} />
-              ⚡ 자동 스케줄 배정 (AI)
+              자동 스케줄 배정 (AI)
             </button>
             
             <button 
-              onClick={handleClearRoster} 
+              onClick={() => handleClearRoster(true)}
               className="btn-action-outline"
-              style={{ color: 'var(--text-muted)' }}
+              style={{ color: '#2563eb', borderColor: '#93c5fd' }}
             >
               <RefreshCw size={16} />
-              전체 비우기
+              확정 제외 비우기
+            </button>
+
+            <button
+              onClick={() => handleClearRoster(false)}
+              className="btn-action-outline"
+              style={{ color: 'var(--text-muted)' }}
+              title="확정 근무를 포함해 편성표와 연동 캘린더에서 모두 삭제"
+            >
+              <Trash2 size={15} />
+              근무 전체 삭제
             </button>
 
             {/* 실시간 근무 규칙 검증 경고 (호버 팝오버) */}
             <div className="hover-popover-container">
               <div 
                 className="hover-popover-trigger"
+                tabIndex={0}
+                role="button"
                 style={{
                   borderColor: rosterViolations.length > 0 ? '#f59e0b' : '#10b981',
                   backgroundColor: rosterViolations.length > 0 ? '#fffbeb' : '#f0fdf4',
@@ -2414,12 +2840,12 @@ export default function ManagerScheduler({
                   cursor: 'pointer'
                 }}
               >
-                <span>{rosterViolations.length > 0 ? '⚠️' : '✅'}</span>
+                {rosterViolations.length > 0 ? <TriangleAlert size={15} strokeWidth={2.2} /> : <CircleCheckBig size={15} strokeWidth={2.2} />}
                 <span>규칙 검증 {rosterViolations.length > 0 ? `(${rosterViolations.length})` : ''}</span>
               </div>
               <div className="hover-popover-content" style={{ width: '380px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', marginBottom: '4px' }}>
-                  <span style={{ fontSize: '16px' }}>{rosterViolations.length > 0 ? '⚠️' : '✅'}</span>
+                  {rosterViolations.length > 0 ? <TriangleAlert size={17} strokeWidth={2.2} /> : <CircleCheckBig size={17} strokeWidth={2.2} />}
                   <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: rosterViolations.length > 0 ? '#b45309' : '#166534' }}>
                     {rosterViolations.length > 0 ? `실시간 근무 규칙 검증 경고 (${rosterViolations.length}건)` : '현재 스케줄 규칙 검증 완료'}
                   </h4>
@@ -2445,6 +2871,8 @@ export default function ManagerScheduler({
             <div className="hover-popover-container">
               <div 
                 className="hover-popover-trigger"
+                tabIndex={0}
+                role="button"
                 style={{
                   borderColor: Object.keys(assignmentAuditLogs[currentMonthKey] || {}).length > 0 ? '#3b82f6' : 'var(--border-color)',
                   backgroundColor: Object.keys(assignmentAuditLogs[currentMonthKey] || {}).length > 0 ? '#eff6ff' : 'var(--bg-card)',
@@ -2460,12 +2888,12 @@ export default function ManagerScheduler({
                   cursor: 'pointer'
                 }}
               >
-                <span>📝</span>
+                <ClipboardList size={15} strokeWidth={2.2} />
                 <span>배정 사유 로그</span>
               </div>
               <div className="hover-popover-content" style={{ width: '400px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', marginBottom: '4px' }}>
-                  <span style={{ fontSize: '16px' }}>📝</span>
+                  <ClipboardList size={17} strokeWidth={2.2} color="#2563eb" />
                   <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: 'var(--text-main)' }}>
                     AI 자동 근무 배정 사유 로그
                   </h4>
@@ -2508,7 +2936,7 @@ export default function ManagerScheduler({
             
             <button onClick={handleSaveAll} className="btn-action-solid">
               <Save size={16} />
-              저장 및 캘린더 연동하기
+              저장 및 내 캘린더 연동
             </button>
           </div>
         </div>
@@ -2610,6 +3038,12 @@ export default function ManagerScheduler({
               </button>
             </form>
 
+            <label className="btn-action-outline" style={{ justifyContent: 'center', padding: '7px', fontSize: '11px', cursor: 'pointer' }} title="엑셀에서 CSV UTF-8 형식으로 저장한 파일을 불러옵니다">
+              <Download size={13} style={{ transform: 'rotate(180deg)' }} />
+              엑셀용 CSV 일괄 불러오기
+              <input type="file" accept=".csv,text/csv" onChange={handleImportStaffCSV} style={{ display: 'none' }} />
+            </label>
+
             {/* Staff Scroll Area */}
             <div className="staff-scroll-area">
               {staffList.map(staff => (
@@ -2654,10 +3088,10 @@ export default function ManagerScheduler({
                       <button 
                         type="button"
                         onClick={() => handleOpenStaffConfig(staff)}
-                        style={{ border: 'none', background: 'none', color: 'var(--primary)', cursor: 'pointer', padding: '4px', fontSize: '12px' }}
+                        style={{ border: 'none', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                         title="개인 사정 및 제약 조건 설정"
                       >
-                        ⚙️
+                        <UserRoundCog size={15} strokeWidth={2} />
                       </button>
                       <button 
                         type="button"
@@ -2689,6 +3123,21 @@ export default function ManagerScheduler({
                     {staff.avoidWith && staff.avoidWith.length > 0 && (
                       <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#f3f4f6', color: '#4b5563', fontWeight: '700' }}>
                         기피{staff.avoidWith.length}
+                      </span>
+                    )}
+                    {(staff.minNightShifts > 0 || staff.maxNightShifts !== undefined) && (
+                      <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#ede9fe', color: '#6d28d9', fontWeight: '700' }}>
+                        N {staff.minNightShifts || 0}~{staff.maxNightShifts ?? 6}
+                      </span>
+                    )}
+                    {staff.allowedShiftIds?.length > 0 && (
+                      <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', backgroundColor: '#ecfeff', color: '#0e7490', fontWeight: '700' }}>
+                        가능 {staff.allowedShiftIds.join('/')}
+                      </span>
+                    )}
+                    {staff.linkedUserId && (
+                      <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', backgroundColor: staff.syncStatus === 'accepted' ? '#dcfce7' : staff.syncStatus === 'rejected' ? '#fee2e2' : '#e0f2fe', color: staff.syncStatus === 'accepted' ? '#15803d' : staff.syncStatus === 'rejected' ? '#b91c1c' : '#0369a1', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                        <Link2 size={9} /> {staff.syncStatus === 'accepted' ? '캘린더 연동' : staff.syncStatus === 'rejected' ? '연동 거절' : '연동 대기'}
                       </span>
                     )}
                     {staff.specialNote && (
@@ -2777,8 +3226,9 @@ export default function ManagerScheduler({
 
                 {/* Right: Form */}
                 <div style={{ borderLeft: '1px dashed var(--border-color)', paddingLeft: '20px' }}>
-                  <h4 style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 8px 0' }}>
-                    {editingShiftId ? '🎨 브러시 정보 수정' : '➕ 새 근무 브러시 추가'}
+                  <h4 style={{ fontSize: '12px', fontWeight: '800', color: 'var(--text-main)', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {editingShiftId ? <Paintbrush size={14} color="var(--primary)" /> : <Plus size={14} color="var(--primary)" />}
+                    {editingShiftId ? '브러시 정보 수정' : '새 근무 브러시 추가'}
                   </h4>
                   <form onSubmit={handleSaveShiftType} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '8px' }}>
@@ -2890,11 +3340,11 @@ export default function ManagerScheduler({
         )}        {/* Modal 3: Regulations Settings */}
         {showRulesPanel && (
           <div className="custom-modal-overlay" onClick={() => setShowRulesPanel(false)}>
-            <div className="custom-modal-content" onClick={(e) => e.stopPropagation()} style={{ width: '420px' }}>
+            <div className="custom-modal-content" onClick={(e) => e.stopPropagation()} style={{ width: '580px', maxHeight: '88vh', overflowY: 'auto' }}>
               <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '14px' }}>⚙️</span>
+                  <Settings size={16} strokeWidth={2.1} color="var(--primary)" />
                   <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--text-main)' }}>근무 환경 및 규정 설정</span>
                 </div>
                 <button 
@@ -2983,6 +3433,42 @@ export default function ManagerScheduler({
                 />
               </div>
 
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}><span>최대 연속 휴무</span><b style={{ color: 'var(--primary)' }}>{wardRules.maxConsecutiveOff}일</b></div>
+                  <input type="range" min="1" max="10" value={wardRules.maxConsecutiveOff} onChange={(e) => setWardRules(prev => ({ ...prev, maxConsecutiveOff: Number(e.target.value) }))} style={{ width: '100%' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: '700', display: 'flex', justifyContent: 'space-between' }}><span>최대 연속 나이트</span><b style={{ color: 'var(--primary)' }}>{wardRules.maxConsecutiveNight}일</b></div>
+                  <input type="range" min="1" max="4" value={wardRules.maxConsecutiveNight} onChange={(e) => setWardRules(prev => ({ ...prev, maxConsecutiveNight: Number(e.target.value) }))} style={{ width: '100%' }} />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px' }}><Ban size={13} color="#dc2626" /> 금지 패턴 (쉼표 구분)</label>
+                <input className="input-text" value={(wardRules.forbiddenPatterns || []).join(', ')} onChange={(e) => setWardRules(prev => ({ ...prev, forbiddenPatterns: e.target.value.split(',').map(v => v.trim().toUpperCase()).filter(Boolean) }))} placeholder="ND, NE, ED, NNNN" style={{ width: '100%', padding: '7px' }} />
+                <label style={{ fontSize: '11px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '5px', margin: '8px 0 4px' }}><TriangleAlert size={13} color="#d97706" /> 사용자 회피 패턴 (경고 표시)</label>
+                <input className="input-text" value={(wardRules.avoidPatterns || []).join(', ')} onChange={(e) => setWardRules(prev => ({ ...prev, avoidPatterns: e.target.value.split(',').map(v => v.trim().toUpperCase()).filter(Boolean) }))} placeholder="예: EN, DDDDD" style={{ width: '100%', padding: '7px' }} />
+              </div>
+
+              <div style={{ padding: '10px', background: '#f8fafc', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '11px', fontWeight: '800', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '5px' }}><CalendarRange size={13} /> 요일별 교대 최소 인원</div>
+                {[
+                  ['weekday', '평일'],
+                  ['saturday', '토요일'],
+                  ['holiday', '일요일·공휴일']
+                ].map(([type, label]) => (
+                  <div key={type} style={{ display: 'grid', gridTemplateColumns: '85px repeat(3, 1fr)', gap: '6px', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '10.5px', fontWeight: '700' }}>{label}</span>
+                    {['D', 'E', 'N'].map(shiftId => (
+                      <label key={shiftId} style={{ fontSize: '9px', color: 'var(--text-muted)' }}>{shiftId}
+                        <input type="number" min="0" max="99" value={wardRules.coverage?.[type]?.[shiftId] ?? 0} onChange={(e) => setWardRules(prev => ({ ...prev, coverage: { ...prev.coverage, [type]: { ...(prev.coverage?.[type] || {}), [shiftId]: Number(e.target.value) } } }))} className="input-text" style={{ width: '100%', padding: '5px' }} />
+                      </label>
+                    ))}
+                  </div>
+                ))}
+              </div>
+
               <hr style={{ border: 'none', borderTop: '1px dashed var(--border-color)', margin: '4px 0' }} />
 
               {/* Toggles */}
@@ -2993,7 +3479,8 @@ export default function ManagerScheduler({
                     checked={wardRules.protectJuniors}
                     onChange={(e) => setWardRules(prev => ({ ...prev, protectJuniors: e.target.checked }))}
                   />
-                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>🛡️ 신규 보호 (경력직 1인 조화)</span>
+                  <ShieldCheck size={14} color="#16a34a" />
+                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>신규 보호 (경력직 1인 조화)</span>
                 </label>
 
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
@@ -3002,7 +3489,8 @@ export default function ManagerScheduler({
                     checked={wardRules.avoidConflict}
                     onChange={(e) => setWardRules(prev => ({ ...prev, avoidConflict: e.target.checked }))}
                   />
-                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>🚫 갈등 조원 자동 분리</span>
+                  <UserX size={14} color="#dc2626" />
+                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>갈등 조원 자동 분리</span>
                 </label>
 
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
@@ -3011,7 +3499,8 @@ export default function ManagerScheduler({
                     checked={wardRules.matchPreceptors}
                     onChange={(e) => setWardRules(prev => ({ ...prev, matchPreceptors: e.target.checked }))}
                   />
-                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>🤝 사수-부사수 동행 스케줄</span>
+                  <Handshake size={14} color="#2563eb" />
+                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>사수-부사수 동행 스케줄</span>
                 </label>
 
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
@@ -3020,7 +3509,8 @@ export default function ManagerScheduler({
                     checked={useTeams}
                     onChange={(e) => setUseTeams(e.target.checked)}
                   />
-                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>👥 팀(조) 구분 및 표시 활성화</span>
+                  <Users size={14} color="#7c3aed" />
+                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>팀(조) 구분 및 표시 활성화</span>
                 </label>
               </div>
 
@@ -3028,7 +3518,7 @@ export default function ManagerScheduler({
 
               {/* Custom Roles Manager */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <span style={{ fontSize: '12px', fontWeight: '850', color: 'var(--text-main)' }}>📋 역할/직급 목록 관리</span>
+                <span style={{ fontSize: '12px', fontWeight: '850', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '5px' }}><ClipboardList size={14} /> 역할/직급 목록 관리</span>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                   {customRoles.map(r => (
                     <span
@@ -3150,7 +3640,9 @@ export default function ManagerScheduler({
           <div style={{
             backgroundColor: '#ffffff',
             borderRadius: '12px',
-            width: '450px',
+            width: '620px',
+            maxHeight: '88vh',
+            overflowY: 'auto',
             padding: '24px',
             boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
             animation: 'scaleIn 0.2s ease',
@@ -3159,8 +3651,9 @@ export default function ManagerScheduler({
             gap: '16px'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
-              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '850', color: 'var(--text-main)' }}>
-                👤 {selectedStaffForConfig.name} 개인 제약 및 설정
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '850', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                <UserRoundCog size={17} strokeWidth={2.1} />
+                {selectedStaffForConfig.name} 개인 제약 및 설정
               </h3>
             </div>
             
@@ -3251,10 +3744,66 @@ export default function ManagerScheduler({
                   />
                 </div>
               </div>
+              <div style={{ padding: '12px', backgroundColor: '#f0f9ff', borderRadius: '8px', border: '1px solid #bae6fd' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '8px' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', fontWeight: '800', color: '#075985' }}><Link2 size={13} /> 가입 계정 및 캘린더 연동</span>
+                  {personalConfigForm.linkedUserId && (
+                    <span style={{ fontSize: '9.5px', fontWeight: '800', padding: '2px 7px', borderRadius: '10px', background: personalConfigForm.syncStatus === 'accepted' ? '#dcfce7' : personalConfigForm.syncStatus === 'rejected' ? '#fee2e2' : '#fef3c7', color: personalConfigForm.syncStatus === 'accepted' ? '#15803d' : personalConfigForm.syncStatus === 'rejected' ? '#b91c1c' : '#b45309' }}>
+                      {personalConfigForm.syncStatus === 'accepted' ? '연동 수락됨' : personalConfigForm.syncStatus === 'rejected' ? '연동 거절됨' : '수락 대기 중'}
+                    </span>
+                  )}
+                  {currentUser?.id && <button type="button" onClick={refreshScheduleSyncRequests} className="btn-action-outline" style={{ padding: '3px 6px', fontSize: '9px' }} title="연동 상태 새로고침"><RefreshCw size={10} /></button>}
+                </div>
+                {!currentUser?.id ? (
+                  <div style={{ fontSize: '10.5px', color: '#64748b' }}>가입 계정 검색과 연동 요청은 로그인 후 사용할 수 있습니다.</div>
+                ) : (
+                  <>
+                    <button type="button" onClick={() => setPersonalConfigForm(prev => ({ ...prev, linkedUserId: currentUser.id, linkedUserNickname: currentUser.nickname || currentUser.id, syncStatus: 'accepted' }))} className="btn-action-outline" style={{ padding: '5px 8px', fontSize: '10px', marginBottom: '7px' }}>
+                      <UserCheck size={12} /> 이 조원을 내 계정으로 지정
+                    </button>
+                    {personalConfigForm.linkedUserId && <div style={{ fontSize: '10.5px', color: '#0369a1', marginBottom: '7px' }}>연결 계정: {personalConfigForm.linkedUserNickname || personalConfigForm.linkedUserId}</div>}
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <input type="text" value={accountSearchQuery} onChange={(e) => setAccountSearchQuery(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSearchRegisteredUsers(); } }} placeholder="가입자 닉네임 또는 계정 ID 검색" className="input-text" style={{ flex: 1, padding: '7px 9px', fontSize: '11px' }} />
+                      <button type="button" onClick={handleSearchRegisteredUsers} className="btn-action-outline" style={{ padding: '6px 10px', fontSize: '10.5px' }} disabled={accountSearchLoading}><Search size={13} /> {accountSearchLoading ? '검색 중' : '검색'}</button>
+                    </div>
+                    {accountSearchResults.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', marginTop: '7px', maxHeight: '110px', overflowY: 'auto' }}>
+                        {accountSearchResults.map(user => (
+                          <div key={user.id} style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '6px 8px', background: '#fff', border: '1px solid #e0f2fe', borderRadius: '6px' }}>
+                            <span style={{ flex: 1, fontSize: '10.5px' }}><b>{user.nickname}</b> <span style={{ color: '#94a3b8' }}>({user.id})</span></span>
+                            <button type="button" onClick={() => handleRequestAccountLink(user)} className="btn-action-solid" style={{ padding: '4px 8px', fontSize: '10px' }}><Link2 size={11} /> 연동 요청</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+              <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <div style={{ fontSize: '11px', fontWeight: '800', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '5px' }}><CalendarRange size={13} /> 가능 근무 · 나이트 · 재직 기간</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+                  {currentShifts.filter(s => !isOffShift(s.id)).map(shift => (
+                    <label key={shift.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px' }}>
+                      <input type="checkbox" checked={personalConfigForm.allowedShiftIds.includes(shift.id)} onChange={(e) => setPersonalConfigForm(prev => ({ ...prev, allowedShiftIds: e.target.checked ? [...prev.allowedShiftIds, shift.id] : prev.allowedShiftIds.filter(id => id !== shift.id) }))} />
+                      {shift.code} {shift.label}
+                    </label>
+                  ))}
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>선택하지 않으면 모든 근무 가능</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '8px' }}>
+                  <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>나이트 최소<input type="number" min="0" max="31" value={personalConfigForm.minNightShifts} onChange={(e) => setPersonalConfigForm(prev => ({ ...prev, minNightShifts: e.target.value }))} className="input-text" style={{ width: '100%', padding: '6px' }} /></label>
+                  <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>나이트 최대<input type="number" min="0" max="31" value={personalConfigForm.maxNightShifts} onChange={(e) => setPersonalConfigForm(prev => ({ ...prev, maxNightShifts: e.target.value }))} className="input-text" style={{ width: '100%', padding: '6px' }} /></label>
+                  <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>목표 근무일수<input type="number" min="0" max="31" value={personalConfigForm.targetWorkDays} onChange={(e) => setPersonalConfigForm(prev => ({ ...prev, targetWorkDays: e.target.value }))} className="input-text" style={{ width: '100%', padding: '6px' }} placeholder="0=자동" /></label>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>근무 시작일<input type="date" value={personalConfigForm.employmentStartDate} onChange={(e) => setPersonalConfigForm(prev => ({ ...prev, employmentStartDate: e.target.value }))} className="input-text" style={{ width: '100%', padding: '6px' }} /></label>
+                  <label style={{ fontSize: '10px', color: 'var(--text-muted)' }}>근무 종료일<input type="date" value={personalConfigForm.employmentEndDate} onChange={(e) => setPersonalConfigForm(prev => ({ ...prev, employmentEndDate: e.target.value }))} className="input-text" style={{ width: '100%', padding: '6px' }} /></label>
+                </div>
+              </div>
               {/* Special Note */}
               <div>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
-                  📌 개인 사정 / 특이사항 (예: 육아, 건강, 시험 등)
+                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px' }}>
+                  <StickyNote size={13} /> 개인 사정 / 특이사항 (예: 육아, 건강, 시험 등)
                 </label>
                 <input
                   type="text"
@@ -3281,7 +3830,8 @@ export default function ManagerScheduler({
                     checked={personalConfigForm.nightAvoid}
                     onChange={(e) => setPersonalConfigForm(prev => ({ ...prev, nightAvoid: e.target.checked }))}
                   />
-                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>🌙 야간근무 제외</span>
+                  <Moon size={13} color="#7c3aed" />
+                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>야간근무 제외</span>
                 </label>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid var(--border-color)', cursor: 'pointer', userSelect: 'none' }}>
                   <input
@@ -3289,14 +3839,15 @@ export default function ManagerScheduler({
                     checked={personalConfigForm.weekendOff}
                     onChange={(e) => setPersonalConfigForm(prev => ({ ...prev, weekendOff: e.target.checked }))}
                   />
-                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>📅 주말오프 희망</span>
+                  <CalendarOff size={13} color="#d97706" />
+                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: 'var(--text-main)' }}>주말오프 희망</span>
                 </label>
               </div>
 
               {/* Preceptor coupling */}
               <div>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
-                  🤝 동행 근무 조원 지정 (사수-부사수 매칭)
+                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px' }}>
+                  <Handshake size={13} /> 동행 근무 조원 지정 (사수-부사수 매칭)
                 </label>
                 <select
                   value={personalConfigForm.couplingWith}
@@ -3320,8 +3871,8 @@ export default function ManagerScheduler({
 
               {/* Avoid With (Conflict avoidance) */}
               <div>
-                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>
-                  ⚠️ 갈등 관계 및 근무 기피 대상 조원 (배치 시 자동 회피)
+                <label style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '4px' }}>
+                  <TriangleAlert size={13} color="#d97706" /> 갈등 관계 및 근무 기피 대상 조원 (배치 시 자동 회피)
                 </label>
                 <div style={{ maxHeight: '100px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px', backgroundColor: '#ffffff' }}>
                   {staffList.filter(s => s.id !== selectedStaffForConfig.id).map(s => {

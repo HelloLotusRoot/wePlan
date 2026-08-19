@@ -32,6 +32,9 @@ public class CalendarEvent {
     private Boolean isManagerScheduled;
     private String staffName;
     private String label;
+    private String ownerUserId;
+    private String scheduleManagerUserId;
+    private String scheduleStaffId;
     
     // Appointment / Trip specific fields
     private String title;

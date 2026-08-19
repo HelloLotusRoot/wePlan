@@ -31,6 +31,12 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     type VARCHAR(30),
     date VARCHAR(10),
     shift_type VARCHAR(50),
+    is_manager_scheduled TINYINT(1) DEFAULT 0,
+    staff_name VARCHAR(100),
+    label VARCHAR(200),
+    owner_user_id VARCHAR(100),
+    schedule_manager_user_id VARCHAR(100),
+    schedule_staff_id VARCHAR(100),
     title VARCHAR(300),
     time VARCHAR(10),
     place VARCHAR(300),
@@ -51,6 +57,23 @@ CREATE TABLE IF NOT EXISTS calendar_events (
     share_permission VARCHAR(20) DEFAULT 'view',
     display_mode VARCHAR(20) DEFAULT 'dot',
     shared_with TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS registered_users (
+    id VARCHAR(100) NOT NULL PRIMARY KEY,
+    nickname VARCHAR(100),
+    profile_image VARCHAR(500)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS schedule_sync_requests (
+    id VARCHAR(100) NOT NULL PRIMARY KEY,
+    manager_user_id VARCHAR(100) NOT NULL,
+    manager_name VARCHAR(100),
+    target_user_id VARCHAR(100) NOT NULL,
+    staff_id VARCHAR(100) NOT NULL,
+    staff_name VARCHAR(100),
+    status VARCHAR(20) NOT NULL,
+    created_at VARCHAR(50)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS shared_users (
